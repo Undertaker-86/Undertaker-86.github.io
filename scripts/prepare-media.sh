@@ -122,7 +122,6 @@ img "$E/trajectories_public.png" $S trajectories.png 1800
 img "$E/scvx_convergence.png"    $S scvx-convergence.png 1600
 img "$E/scores_vs_ta.png"        $S scores-vs-ta.png 1600
 img "$E/penalty_breakdown.png"   $S penalty-breakdown.png 1600
-img "$R/pdm4ar_final_project/cp_congestion_example.png" $S warehouse-congestion.png 1400
 
 # ---------------------------------------------------------------- 7 CVAIAC dense prediction
 S=cvaiac-dense-prediction; C="$R/cvaiac26_team_13"; HA="$R/handout_answer_assets"
@@ -161,3 +160,15 @@ note "$HN/cover.png"
 
 # ---- CVAIAC project 1: course Codabench leaderboard screenshot (team 13 = 1st)
 img "$R/cvaiac26_team_13/leaderboard_result.png" cvaiac-dense-prediction leaderboard.png 1800
+
+# ---- PDM4AR ex14 (multi-agent goal collection). Renders come from the official simulator run on the final code:
+#   1) docker run … idscfrazz/pdm4ar2026 … python scripts/pdm4ar_ex14/extract.py config_{1,2,3}.yaml  → .cache/pdm4ar-ex14/*.json
+#   2) python3 scripts/pdm4ar_ex14/render.py .cache/pdm4ar-ex14 .cache/pdm4ar-ex14/render
+S=pdm4ar-warehouse; W="$SITE/.cache/pdm4ar-ex14/render"
+vid "$W/config_3.mp4" $S config-3 0 30 1080 1 25 25 9
+vid "$W/config_2.mp4" $S config-2 0 20 1080 1 25 25 8
+vid "$W/config_1.mp4" $S config-1 0 40 1080 1 25 25 12
+img "$W/config_3_routes.png" $S routes-3.png 1400
+img "$W/config_2_routes.png" $S routes-2.png 1400
+img "$W/timeline.png"        $S timeline.png 1600
+img "$R/pdm4ar_final_project/cp_congestion_example.png" $S congestion-early.png 1400

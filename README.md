@@ -1,42 +1,51 @@
-# Portfolio site: Gyan Edbert Zesiro
+# Gyan Edbert Zesiro · Robotics portfolio
 
-Astro 5 (static) · TypeScript strict · MDX content collections · Tailwind v4 · zero-JS by default.
+**Live site: https://undertaker-86.github.io**
 
-## Run
+Portfolio of my work in robot learning, perception, planning and embedded systems: humanoid RL for RoboCup,
+autonomous-driving perception, multi-robot planning, an autonomous submarine, a transforming drone/car and more.
+Each project page leads with results and media, then explains the problem, approach and what I learned. Every metric
+says whether it comes from simulation, hardware, validation or a test set.
+
+## Built with
+
+- **[Astro 5](https://astro.build)**: static site, zero JavaScript by default, view transitions between pages
+- **MDX content collections**: one file per project in `src/content/projects/`, checked against a schema at build time
+- **Tailwind CSS 4**: dark/light theme from CSS design tokens
+- **Media**: images as responsive AVIF/WebP; videos as short H.264/VP9 loops that only load when played; the Steelhead
+  AUV CAD as a rotatable 3D model (`<model-viewer>`, loaded on request)
+- **Charts and diagrams**: drawn as inline SVG/HTML at build time, so they follow the theme and need no JavaScript
+
+## Structure
+
+| Path | Contents |
+|---|---|
+| `src/content/projects/` | the case studies (MDX) |
+| `src/pages/` | home, project index, project pages, about, technical write-ups |
+| `src/components/` | video loops, figures, pipeline diagrams, charts, 3D viewer |
+| `src/site.config.ts` | profile, education, roles, publications, skills, contact links |
+| `scripts/` | media pipeline: video/image compression, chart data, CAD → GLB conversion, PDM4AR render tools |
+| `qa/` | screenshot, link, interaction and Lighthouse checks |
+
+## Run locally
 
 ```bash
-nix develop                 # node 22, pnpm, ffmpeg, poppler, imagemagick, librsvg, python (numpy/scipy/matplotlib)
+nix develop          # Node 22, pnpm, ffmpeg, ImageMagick, Python (or install these yourself)
 pnpm install
-pnpm media                  # copy + compress media from the project folders (idempotent; FORCE=1 to rebuild)
-pnpm dev                    # http://localhost:4321
-pnpm check && pnpm build && pnpm preview
+pnpm dev             # http://localhost:4321
+pnpm build && pnpm preview
 ```
 
-## Layout
+`pnpm media` regenerates the compressed media from the original project folders. It needs those folders locally; the
+compressed outputs are already committed, so building the site does not.
 
-| Path | What |
-|---|---|
-| `src/content/projects/*.mdx` | 11 case studies. The Zod schema in `src/content.config.ts` rejects missing fields, alt text or images at build time |
-| `src/site.config.ts` | name, education, roles, publications, skills, **contact/photo flags (all off)** |
-| `src/components/` | `VideoLoop`, `Figure`, `Flow` (pipeline diagrams), `BarCompare` / `LineChart` (zero-JS SVG charts), `Metrics`, `EcsDiagram`, `HeroField` (canvas accent) |
-| `src/scripts/site.ts` | the only global JS (~1 KB gz): theme, reveals, hover/in-view videos, lightbox |
-| `scripts/prepare-media.sh` | ffmpeg/magick pipeline → `public/media/<slug>/*.{mp4,webm}` + `src/assets/<slug>/`; log in `scripts/media-sizes.log` |
-| `scripts/make_chart_data.py`, `make_covers.py` | chart JSON + covers regenerated from raw samples (stethoscope log, Stoeber CSVs, ECS firmware constants) |
-| `private/profile.jpg` | compressed portrait, **deliberately outside `src/`** so it never ships |
-| `qa/` | `shots.mjs` (Playwright full-page screenshots + overflow/broken-image check), `interact.mjs`, `check-links.mjs`, `lighthouse.sh`, `screens.sh` (Firefox fallback) |
+## Deployment
 
-QA needs Chromium: `export CHROME_PATH=$(nix build nixpkgs#chromium --no-link --print-out-paths)/bin/chromium`.
+Every push to `main` builds the site and publishes it to GitHub Pages
+(`.github/workflows/deploy.yml`, with Settings → Pages → Source set to *GitHub Actions*).
 
-## Deploy (GitHub Pages)
+## Contact
 
-1. Create a GitHub repository named **`<username>.github.io`** (links are root-relative, so the site must be served
-   at the domain root).
-2. Commit and push this folder to its `main` branch (`private/`, `node_modules/`, `dist/` are git-ignored).
-3. In the repository: Settings → Pages → Source: **GitHub Actions**. `.github/workflows/deploy.yml` builds and
-   deploys on every push; the site URL is taken from the Pages settings automatically.
+gyan.gyan26@gmail.com · [Google Scholar](https://scholar.google.com/citations?user=eKzf9uoAAAAJ&hl=en)
 
-## Publishing contact details / photo
-
-Set the values and flip `show: true` in `src/site.config.ts`. For the photo, also run
-`mkdir -p src/assets/profile && cp private/profile.jpg src/assets/profile/`. The site URL comes from the deploy
-workflow (`SITE_URL`).
+© Gyan Edbert Zesiro. The content and media are mine and my teams'. Please ask before reusing them.

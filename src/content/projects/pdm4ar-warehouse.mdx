@@ -1,0 +1,152 @@
+---
+title: 'Multi-robot goal collection: plan centrally, verify exactly'
+short: 'Multi-robot warehouse'
+summary: 'A fleet planner for differential-drive robots that collect and deliver goals within 60 s: exact work allocation, space-time coordination and a full replay of every plan before execution. Zero collisions in about 170 runs.'
+org: 'ETH Zurich'
+context: 'Planning and Decision Making for Autonomous Robots · final project'
+role: 'Individual: designed, implemented, tested and analysed the planner'
+team: 'Individual final project (PDM4AR 2026)'
+start: 2026-11-01
+end: 2026-11-18
+categories: ['Planning & Control', 'Robotics']
+stack: ['Python', 'Visibility graphs', 'Exact subset DP', 'Space-time planning', 'LNS', 'dg-commons simulator']
+featured: true
+order: 6
+cover: '../../assets/pdm4ar-warehouse/config-3-poster.jpg'
+coverAlt: 'Three robots on a map with obstacles picking up yellow goals and delivering them to collection points'
+video: 'config-3'
+headline: '0 collisions in ~170 runs'
+metrics:
+  - { value: '0', label: 'Collisions in about 170 real-simulator runs, incl. edge cases', basis: 'simulation' }
+  - { value: '12 / 12', label: 'Goals delivered by 3 robots on the hardest public map, in 21.7 s', basis: 'simulation' }
+  - { value: '95 %', label: 'Of the provable best score on public config 2', basis: 'simulation' }
+  - { value: '< 1 ms', label: 'Mean per-step compute on the robots (limit 100 ms)', basis: 'simulation' }
+codeNote: 'Course solution code is not published, per ETH course policy.'
+---
+
+import Figure from '~/components/Figure.astro';
+import Flow from '~/components/Flow.astro';
+import BarCompare from '~/components/BarCompare.astro';
+import KatexCss from '~/components/KatexCss.astro';
+import c2Poster from '~/assets/pdm4ar-warehouse/config-2-poster.jpg';
+import c1Poster from '~/assets/pdm4ar-warehouse/config-1-poster.jpg';
+import routes3 from '~/assets/pdm4ar-warehouse/routes-3.png';
+import routes2 from '~/assets/pdm4ar-warehouse/routes-2.png';
+import timeline from '~/assets/pdm4ar-warehouse/timeline.png';
+import early from '~/assets/pdm4ar-warehouse/congestion-early.png';
+
+<KatexCss />
+
+## Problem
+
+One to eight differential-drive robots share a warehouse with obstacles. They must pick up goals and deliver each one
+to any collection point within 60 s. A robot carries one goal at a time, picks up any goal it drives into, and delivers
+whenever it crosses a collection point while loaded. At run time each robot sees only a limited, occluded 2D LiDAR scan,
+and the robots **cannot communicate**. The score rewards finishing early and penalises everything else:
+
+$$
+\text{score} = 100\,G_{\text{delivered}} - 500\,N_{\text{collided}} + 10\,(60 - T_{\text{last}}) - 0.5\,D - 0.01\,E - \text{penalties}
+$$
+
+Reading the score as a specification set the design. One second of makespan is worth 10 points, while one second of
+driving costs about 1.2 points per robot, so **robots should always drive at full speed and the work must be balanced**.
+With the kinematic limit $|v| + 0.5|\omega| \le 2$, a path takes exactly $(L + 0.5\,\Theta)/2$ seconds, where $\Theta$ is
+the total turning. Driving backwards is free, so a reversal at a goal costs nothing.
+
+## Approach
+
+The simulator is deterministic and every robot knows its own state exactly. A central planner can therefore compute
+the **complete timed trajectory of every robot**, check it, and send it once. Each robot then just executes its
+plan, with no need to react to the others.
+
+<Flow
+  label="Global planner pipeline"
+  steps={[
+    { title: 'Geometry', sub: 'inflated obstacles, visibility graph, all-pairs shortest paths' },
+    { title: 'Allocation', sub: 'exact subset DP per robot; exact goal splits up to 12 goals', kind: 'model' },
+    { title: 'Turn-exact refinement', sub: 'via points, junction spins and visit order optimised per robot' },
+    { title: 'Space-time coordination', sub: 'prioritised planning, leg alternatives, parking, LNS repair', kind: 'model' },
+    { title: 'Exact replay', sub: 'simulate at 0.01 s with the real goal rules; best verified plan wins', kind: 'io' },
+  ]}
+  feedback="the plan string is the only communication; each robot tracks it with an arc-fitting controller (≈ 1 ms per step)"
+/>
+
+- **Geometry.** The free space is the map shrunk by the robot radius plus a margin, with obstacles inflated by
+  conservative polygons. Shortest paths come from a visibility graph. Pickups use via points just inside each goal and
+  collection disk, so paths only **graze** them instead of driving to their centres, saving up to 1.8 m per delivery.
+  Every leg also avoids other goals, so a robot never picks something up by accident.
+- **Allocation.** An exact backward DP over goal subsets gives the cheapest way for each robot to serve any set of
+  goals. Splits between robots are searched exactly (up to 12 goals) or by local search, minimising
+  makespan plus distance in the same proportions as the score.
+- **Coordination.** Each robot's timing comes from an advance-or-wait DP over (path sample, time) against the robots
+  already planned. When a leg would need long waits, the planner tries other via points, other collection points and
+  detours, and takes the earliest arrival. A search over priority orders and repair of the latest robot (LNS) follow.
+  Finished robots park somewhere safe forever.
+- **Verification.** Before anything is sent, the whole plan is replayed at the simulator's 0.01 s resolution with
+  the exact pickup, delivery and 60 s rules. Static clearance of at least the robot radius + 2.5 cm and robot-robot
+  clearance of at least 1.23 m are enforced. **Collisions and deadlocks are ruled out by construction.**
+- **Over-full maps.** When not every goal can be delivered in 60 s, the objective switches to orienteering: deliver
+  as many goals as possible before the cut-off.
+
+<Figure
+  video={{ slug: 'pdm4ar-warehouse', name: 'config-2', poster: c2Poster }}
+  alt="Four robots sharing two collection points, delivering six goals in 12.35 seconds"
+  caption="Public config 2: four robots, six goals, two collection points. Everything is delivered in 12.35 s; faint lines are the full executed paths."
+  basis="simulation"
+  light={false}
+/>
+
+<Figure src={early} alt="An early failing plan where four robots converge on one collection point" caption="An early failing plan: four robots meeting head-on near a single collection point. Leg alternatives fixed this class of conflict; on one 4-robot, single-collection-point case the makespan fell from 43 s to 25.7 s." basis="simulation" />
+
+## Results
+
+All runs below use the official simulator. Videos and route maps are rendered from its logs of the final code.
+
+<Figure src={routes3} alt="Route map of three robots on the irregular public map, with numbered pickups" caption="Public config 3: full paths of the three robots; numbers give each robot's pickup order." basis="simulation" light={false} />
+<Figure src={timeline} alt="Gantt chart of the three robots, each carrying four goals in turn" caption="Who carries what, when (config 3): each robot delivers exactly four goals, and two finish within 0.05 s of each other. Balancing the work is what the makespan term rewards." basis="simulation" light={false} wide />
+
+<BarCompare
+  title="Public configs: my score vs. the provable best score"
+  beforeName="upper bound for any planner"
+  afterName="my planner"
+  max={1600}
+  rows={[
+    { label: 'Config 1 (1 robot, 5 goals)', before: 850, after: 756.8 },
+    { label: 'Config 2 (4 robots, 6 goals)', before: 1080.8, after: 1029.0 },
+    { label: 'Config 3 (3 robots, 12 goals)', before: 1570, after: 1512.4 },
+  ]}
+  basis="simulation"
+  caption="Upper bounds derived from speed limits, lower-bound geodesics and an exact per-robot Held–Karp bound. All goals delivered with zero collisions on every public config."
+/>
+
+| Test set (real simulator) | Runs | Collisions | Notes |
+|---|---|---|---|
+| Like config 1: 1 robot, 4–7 goals | 15 | 0 | all delivered |
+| Like config 2: 3–5 robots, 5–8 goals | 15 | 0 | all delivered |
+| Like config 3: 3 robots, random map, 10–13 goals | 15 | 0 | all delivered |
+| Random configs: 2–5 robots, 6–12 goals | 48 | 0 | 47/48 all delivered |
+| Broad random and grid maps: 1–6 robots, 3–14 goals | 60 | 0 | |
+| Edge cases: 8 robots / 4 goals, 16–17 goals, one collection point | 10 | 0 | |
+
+In the 7 runs that could not deliver everything, I proved for 5 of them that the time needed exceeds 60 s (lower
+bounds from 63 s to 108 s), so no planner could have.
+
+<Figure
+  video={{ slug: 'pdm4ar-warehouse', name: 'config-1', poster: c1Poster }}
+  alt="A single robot collecting five goals around four square obstacles"
+  caption="Public config 1: one robot, five goals, two collection points, finished in 30.9 s."
+  basis="simulation"
+  light={false}
+/>
+
+## What I learned
+
+- **Turn the grader into design rules.** Full speed always, balance the makespan, and backwards driving is free. Those
+  three facts decided most of the architecture before I wrote any code.
+- **When a system is deterministic, verify instead of reacting.** Exact replay turned a hard online multi-robot problem
+  into an offline search with a correctness check, which is why there are no collisions.
+- **Know how far from optimal you are.** Deriving upper bounds showed that config 2 was already at 95 % of what any
+  planner could reach, so effort went to the instances with real headroom.
+- **Measure every change.** Each improvement was A/B-tested on 45–60 configs. Incremental scheduling (+1 931 points in
+  total) and LNS repair with a 4× faster DP (+3 519) mattered most; more candidates or via points added nothing and
+  were dropped.

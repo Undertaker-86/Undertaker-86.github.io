@@ -1,17 +1,17 @@
 ---
-title: 'PDM4AR: spacecraft docking and a multi-robot warehouse'
-short: 'PDM4AR planning'
-summary: 'Two planning-and-control agents: a spaceship that docks tail-first past planets and moving asteroids using sequential convex programming, and a fleet of differential-drive robots with provably checked, collision-free plans.'
+title: 'Spacecraft docking past moving asteroids'
+short: 'Spacecraft docking'
+summary: 'A planning and control agent that flies a single-thruster spaceship past planets and moving asteroids and reverses it into a narrow docking bay, using sequential convex programming, LQR tracking and online disturbance rejection.'
 org: 'ETH Zurich'
-context: 'Planning and Decision Making for Autonomous Robots (course projects)'
-role: 'Individual: designed, implemented and evaluated both agents'
-team: 'Individual exercises'
+context: 'Planning and Decision Making for Autonomous Robots · exercise 13'
+role: 'Individual: designed, implemented and evaluated the agent'
+team: 'Individual exercise'
 start: 2026-09-15
-end: 2026-12-15
+end: 2026-11-18
 categories: ['Planning & Control', 'Robotics']
-stack: ['Python', 'SCvx (CVXPY)', 'Time-varying LQR', 'Subset DP', 'Space-time planning', 'dg-commons']
+stack: ['Python', 'SCvx (CVXPY)', 'Time-varying LQR', 'Reachability DP', 'dg-commons']
 featured: true
-order: 6
+order: 7
 cover: '../../assets/pdm4ar/docking-poster.jpg'
 coverAlt: 'Spaceship trajectory curving past a planet into a docking bay, with a disturbance burst'
 video: 'docking'
@@ -19,8 +19,7 @@ headline: '4 / 4 docked · 0 collisions'
 metrics:
   - { value: '4 / 4', label: 'Public docking cases completed, zero collisions', basis: 'simulation' }
   - { value: '80 / 80', label: 'Random docking scenarios succeeded, incl. 2× disturbances', basis: 'simulation' }
-  - { value: '0', label: 'Collisions in ~170 warehouse simulator runs', basis: 'simulation' }
-  - { value: '≤ 1.6 ms', label: 'Mean per-tick compute in the warehouse agents (limit 100 ms)', basis: 'simulation' }
+  - { value: '904', label: 'Mean public score, vs. 876 for the TA reference', basis: 'simulation', note: 'TA scores are on private cases' }
 codeNote: 'Course solution code is not published, per ETH course policy.'
 ---
 
@@ -30,13 +29,12 @@ import BarCompare from '~/components/BarCompare.astro';
 import KatexCss from '~/components/KatexCss.astro';
 import traj from '~/assets/pdm4ar/trajectories.png';
 import scvx from '~/assets/pdm4ar/scvx-convergence.png';
-import congestion from '~/assets/pdm4ar/warehouse-congestion.png';
 
 <KatexCss />
 
 ## Problem
 
-**Docking.** A single-thruster spaceship with state $[x, y, \psi, v_x, v_y, \omega, \delta, m]$ must fly past planets
+A single-thruster spaceship with state $[x, y, \psi, v_x, v_y, \omega, \delta, m]$ must fly past planets
 and *moving* asteroids, turn around and reverse into a docking bay. The bay's arms leave only a narrow gap. An
 unknown external push may hit it on the way. The grader rewards short, cheap, accurate flights and bills computation
 inside the control loop:
@@ -45,12 +43,9 @@ $$
 \text{score} = 1000 - 10\left(\tfrac{d}{5} + \tfrac{t}{3} + \overline{|F|} + \tfrac{\text{miss}}{2}\right) - 100\,\bar t_{\text{compute}}
 $$
 
-**Warehouse.** One to eight differential-drive robots must pick up goals and deliver them to collection points
-within 60 s, using only limited, occluded 2D LiDAR and no communication at run time. A collision costs 500 points.
-
 ## Approach
 
-### Docking: plan with SCvx, track with LQR, replan on disturbances
+### Plan with SCvx, track with LQR, replan on disturbances
 
 <Flow
   label="Docking planning and control loop"
@@ -69,49 +64,20 @@ Straight-line seeds collided with asteroids in *space-time* and never converged.
 
 <Figure src={scvx} alt="SCvx convergence: cost and constraint violation over iterations" caption="SCvx convergence on a public case." basis="simulation" />
 
-### Warehouse: plan everything centrally, verify it exactly, then execute
-
-The simulator is deterministic, so a central planner can compute and **check the full timed trajectory of every
-robot** before anything moves. Collisions and deadlocks are then ruled out by construction.
-
-1. **Geometry.** Inflated obstacles, a visibility graph, and all-pairs shortest paths. Pickups only graze each goal disk
-   via points just inside it.
-2. **Allocation.** An exact subset DP prices every goal set per robot. Goals are split among robots exactly for ≤ 12
-   goals and by local search beyond that.
-3. **Coordination.** Prioritized space-time planning with alternative legs and detours, a search over priority orders,
-   and repair of the critical robot (LNS).
-4. **Execution.** Each agent replays its plan with an arc-fitting tracker, under 2 ms per tick.
-
-<Figure src={congestion} alt="Warehouse map with robot routes converging on a shared collection point" caption="Routes for a congested shared collection point after space-time coordination." basis="simulation" />
-
 ## Results
 
 <Figure src={traj} alt="Four public docking scenarios with planned and flown trajectories" caption="All four public docking cases, closed loop: scores 919 / 888 / 918 / 893, all docked, no collisions." basis="simulation" wide />
 
-<BarCompare
-  title="Warehouse: my score vs. the TA reference"
-  beforeName="TA reference*"
-  afterName="my agent (public config)"
-  max={1600}
-  rows={[
-    { label: 'Config 1 (1 robot)', before: 489.4, after: 756.8 },
-    { label: 'Config 2 (4 robots)', before: 904.3, after: 1029.0 },
-    { label: 'Config 3 (3 robots)', before: 1255.5, after: 1512.4 },
-  ]}
-  basis="simulation"
-  caption="*The TA numbers come from private instances I cannot run, so the comparison (+55 / +14 / +20 %) is indicative only. I also derived upper bounds for any planner on the public configs (≤ 850 / 1081 / 1570); config 2 reaches 95 % of its bound."
-/>
 
-- **Docking:** mean public score **+28.5 over the TA reference** (875.9). All 80 random scenarios succeed, including
-  32 with disturbance bursts up to twice the public strength.
-- **Warehouse:** every goal delivered with **zero collisions** on all public configs and in ~170 randomized and
-  edge-case runs. In 7 over-full cases I proved a lower bound on delivery time above 60 s, and the planner switches
-  to an orienteering objective that maximizes goals delivered.
+- Mean public score **904.4, 28.5 above the TA reference** (875.9; the TA cases are private, so this is indicative).
+- All 80 random scenarios succeed, including 32 with disturbance bursts up to twice the public strength, some
+  generated only after tuning.
+- More case studies in the same course: the [multi-robot warehouse](/projects/pdm4ar-warehouse).
 
 ## What I learned
 
-- **Read the score as a specification.** Turning the grader into design drivers (one second of makespan = 10 points;
-  driving backwards is free) decided most of the architecture before I wrote any code.
+- **Read the score as a specification.** Each second of flight costs 3.3 points and each metre 2, and computation in
+  the loop is billed, so expensive optimisation belongs at episode start, not in the control loop.
 - **Seeds matter more than solvers.** Non-convex trajectory optimization succeeds or fails on its initial guess.
-- **When a system is deterministic, verify instead of reacting.** Exact replay of the plan turned a hard online
-  multi-robot problem into an offline search with a correctness check.
+- **Use the model to measure what you can't see.** Because the planning model matches the simulator, a one-step
+  prediction residual measures the unknown push exactly, which made disturbance rejection a replanning problem.
