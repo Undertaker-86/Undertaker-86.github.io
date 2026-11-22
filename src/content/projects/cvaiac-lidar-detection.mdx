@@ -1,13 +1,13 @@
 ---
 title: 'Two-stage 3D car detection from LiDAR point clouds'
 short: 'LiDAR detection'
-summary: 'A PointNet++-style two-stage detector for cars in LiDAR scans. Refining proposals in each box’s canonical frame lifted hard-case AP from 76.0 to 89.4 on validation.'
+summary: 'A PointNet++-style two-stage detector for cars in LiDAR scans. Refining proposals in each box’s canonical frame lifted hard-case AP from 76.0 to 89.4 on validation; BEV ensembles and learned point verifiers then pushed it to 96.83.'
 org: 'ETH Zurich'
 context: 'Computer Vision and AI for Autonomous Cars · Project 2'
 role: 'Detector implementation, Problem 3 ablation, analysis and visualisations'
 team: 'Team 13'
 start: 2026-10-20
-end: 2026-11-20
+end: 2026-11-22
 categories: ['Perception', 'Learning & RL']
 stack: ['PyTorch', 'PointNet++', 'Two-stage detection', 'RTX 5080', 'Matplotlib / video tooling']
 featured: true
@@ -15,8 +15,9 @@ order: 9
 cover: '../../assets/cvaiac-lidar-detection/drive-poster.jpg'
 coverAlt: 'Virtual camera moving through a LiDAR scan with detected cars boxed in 3D'
 video: 'drive'
-headline: 'Hard AP 76.0 → 89.4'
+headline: 'Hard AP 76.0 → 96.83'
 metrics:
+  - { value: '96.83', label: 'Validation hard AP11 after BEV ensembles + point verifiers (easy 97.08, moderate 96.59)', basis: 'validation' }
   - { value: '95.1 / 90.1 / 89.4', label: 'Validation AP11 easy / moderate / hard, canonical refinement', basis: 'validation' }
   - { value: '+13.4', label: 'AP points on hard cars over the baseline', basis: 'validation' }
   - { value: '72 → 87 %', label: 'Cars localised within IoU 0.5 (all 7 248 val cars)', basis: 'validation' }
@@ -87,6 +88,13 @@ fell from 3.0° to 1.4°.
 <Figure src={dist} alt="Recall by distance bin for the four variants" caption="Recall by distance: the canonical frame helps most on far, sparse cars." basis="validation" />
 <Figure src={evo} alt="One validation scene showing detections across training epochs" caption="How detections on one validation scene evolve during training." basis="validation" wide />
 <Figure video={{ slug: 'cvaiac-lidar-detection', name: 'detector', poster: detectorPoster }} alt="Validation scenes with refined detections in blue, ground truth in green and first-stage proposals in grey, plus bird's-eye views" caption="Detector analysis on validation scenes: refined boxes (blue), ground truth (green), first-stage proposals (grey), with bird's-eye comparisons against the baseline." basis="validation" />
+
+## Pushing hard AP further
+
+After the ablation I kept going on the hard cars. Fusing the grid refiner with an ensemble of bird's-eye-view (BEV)
+detectors reached 95.28 hard AP. Training BEV models with matched scene and box augmentation, then rescoring
+detections with an ensemble of learned point verifiers that separate hard true matches from likely false positives,
+reached **96.83 hard AP** (easy 97.08, moderate 96.59) on the same 1 712-frame validation split at 0.5 3D IoU.
 
 ## What I learned
 
