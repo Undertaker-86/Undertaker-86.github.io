@@ -1,0 +1,21 @@
+// Load the Subbots page, open the 3D viewer, wait for the model, save a screenshot + a poster render.
+import { chromium } from 'playwright-core';
+import { writeFileSync } from 'node:fs';
+const base = process.argv[2] ?? 'http://127.0.0.1:4321';
+const orbit = process.argv[3];
+const b = await chromium.launch({ executablePath: process.env.CHROME_PATH, args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const p = await b.newPage({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 2.5 });
+const reqs = [];
+p.on('request', (r) => { const u = new URL(r.url()); if (u.hostname !== '127.0.0.1') reqs.push(r.url()); });
+p.on('pageerror', (e) => console.log('pageerror', e.message));
+await p.goto(base + '/projects/subbots');
+await p.click('[data-cad-load]');
+await p.waitForFunction(() => document.querySelector('model-viewer')?.loaded === true, null, { timeout: 120000 });
+if (orbit) await p.evaluate((o) => { const mv = document.querySelector('model-viewer'); mv.removeAttribute('auto-rotate'); mv.cameraOrbit = o; mv.jumpCameraToGoal(); }, orbit);
+else await p.evaluate(() => document.querySelector('model-viewer').removeAttribute('auto-rotate'));
+await p.waitForTimeout(1500);
+await p.locator('[data-cad]').screenshot({ path: new URL('./out/cad-view.png', import.meta.url).pathname });
+const url = await p.evaluate(() => document.querySelector('model-viewer').toDataURL('image/png'));
+writeFileSync(new URL('./out/cad-poster.png', import.meta.url).pathname, Buffer.from(url.split(',')[1], 'base64'));
+console.log('external requests:', reqs.length ? reqs : 'none');
+await b.close();

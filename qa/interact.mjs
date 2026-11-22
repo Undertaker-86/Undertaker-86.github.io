@@ -1,0 +1,28 @@
+// Interaction smoke test: filter + URL state, no-JS fallback, lightbox, view-transition navigation, keyboard focus.
+import { chromium } from 'playwright-core';
+const base = process.argv[2] ?? 'http://127.0.0.1:4321';
+const b = await chromium.launch({ executablePath: process.env.CHROME_PATH, args: ['--no-sandbox'] });
+const ok = (c, m) => console.log(c ? 'PASS' : 'FAIL', m);
+let p = await (await b.newContext()).newPage();
+await p.goto(base + '/projects?area=embedded');
+ok((await p.locator('[data-cats]:visible').count()) === 3, `filter from URL ?area=embedded shows 3 (got ${await p.locator('[data-cats]:visible').count()})`);
+await p.click('[data-cat="perception"]');
+ok(p.url().includes('area=perception'), 'chip click writes ?area= to URL');
+const nojs = await (await b.newContext({ javaScriptEnabled: false })).newPage();
+await nojs.goto(base + '/projects?area=embedded');
+ok((await nojs.locator('[data-cats]:visible').count()) === 11, 'without JS all 11 projects show');
+await p.goto(base + '/projects/drone-car');
+await p.locator('a[data-zoom]').first().click();
+ok(await p.locator('dialog.lightbox[open] img').isVisible(), 'lightbox opens on figure click');
+await p.keyboard.press('Escape');
+ok(!(await p.locator('dialog.lightbox[open]').count()), 'Escape closes lightbox');
+await p.goto(base + '/');
+await p.locator('article h3 a').first().click();
+await p.waitForURL('**/projects/nomadz-kicking');
+ok(true, 'card click navigates (ClientRouter) to the case study');
+await p.goto(base + '/');
+await p.keyboard.press('Tab');
+ok((await p.evaluate(() => document.activeElement?.textContent?.trim())) === 'Skip to content', 'first Tab focuses skip link');
+const js = await p.evaluate(() => performance.getEntriesByType('resource').filter((r) => r.initiatorType === 'script').reduce((a, r) => a + r.transferSize, 0));
+ok(true, `home JS transferred (external scripts): ${(js / 1024).toFixed(1)} KB`);
+await b.close();

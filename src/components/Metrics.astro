@@ -1,0 +1,27 @@
+---
+interface Metric {
+  value: string;
+  label: string;
+  basis: string;
+  note?: string;
+}
+interface Props {
+  metrics: Metric[];
+}
+const { metrics } = Astro.props;
+---
+
+<dl class="grid grid-cols-1 gap-3 xs:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(11rem,1fr))]">
+  {
+    metrics.map((m, i) => (
+      <div class="reveal card flex flex-col p-4" style={`--d:${i * 60}ms`}>
+        <dt class="order-2 mt-1 text-sm leading-snug text-ink-2">{m.label}</dt>
+        <dd class="order-1 font-mono text-[1.45rem] leading-none font-medium tracking-tight text-ink tabular-nums">{m.value}</dd>
+        <dd class="order-3 mt-3 flex flex-wrap items-center gap-2 text-xs text-ink-3">
+          <span class="chip !py-0 !text-[0.62rem] uppercase">{m.basis}</span>
+          {m.note && <span>{m.note}</span>}
+        </dd>
+      </div>
+    ))
+  }
+</dl>

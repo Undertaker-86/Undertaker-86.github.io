@@ -1,0 +1,114 @@
+---
+title: 'Multi-task segmentation and depth for driving scenes: 1st place'
+short: 'Dense prediction'
+summary: 'One network that predicts semantic segmentation and monocular depth for driving images. It took 1st place on the course leaderboard with a test score of 81.15, from a DeepLabV3+ built from scratch to a fine-tuned Depth Anything 3 model.'
+org: 'ETH Zurich'
+context: 'Computer Vision and AI for Autonomous Cars · Project 1'
+role: 'Model implementation, Optuna campaigns, DA3 integration, training and evaluation workflows'
+team: 'Team 13'
+start: 2026-09-20
+end: 2026-11-10
+categories: ['Perception', 'Learning & RL']
+stack: ['PyTorch', 'PyTorch Lightning', 'DeepLabV3+', 'Depth Anything 3 (ViT-L)', 'Optuna (TPE + pruning)', 'Weights & Biases']
+featured: true
+order: 2
+award: '1st place · course leaderboard'
+cover: '../../assets/cvaiac-dense-prediction/teaser.jpg'
+coverAlt: 'Driving scene with its predicted semantic segmentation and depth maps'
+headline: '1st place · test score 81.15'
+metrics:
+  - { value: '1st', label: 'Place on the course Codabench leaderboard (team 13)', basis: 'test' }
+  - { value: '81.15', label: 'Test multitask score; runner-up 80.28', basis: 'test' }
+  - { value: '91.65', label: 'Test segmentation mIoU', basis: 'test' }
+  - { value: '10.5', label: 'Test depth SI-logRMSE (lower is better)', basis: 'test' }
+codeNote: 'Course solution code is not published, per ETH course policy.'
+credits: 'Team 13, CVAIAC 2026. Built on the official Depth Anything 3 Metric Large checkpoint (ByteDance, Apache-2.0) and DPT.'
+---
+
+import Figure from '~/components/Figure.astro';
+import Flow from '~/components/Flow.astro';
+import BarCompare from '~/components/BarCompare.astro';
+import leaderboard from '~/assets/cvaiac-dense-prediction/leaderboard.png';
+import arch from '~/assets/cvaiac-dense-prediction/architecture.png';
+import seg from '~/assets/cvaiac-dense-prediction/segmentation.jpg';
+import depth from '~/assets/cvaiac-dense-prediction/depth.jpg';
+import optuna from '~/assets/cvaiac-dense-prediction/optuna-history.png';
+
+<Figure src={leaderboard} alt="Codabench leaderboard: cvaiac26_team13 first with multitask 81.15, IoU 91.65, SI-logRMSE 10.5; second 80.28" caption="The course's Codabench test leaderboard: team 13 first with 81.15, ahead of 80.28 and 74.36." basis="test" />
+
+## Problem
+
+An autonomous car needs to know **what** each pixel is and **how far away** it is. The task was one multi-task model
+for 19-class semantic segmentation and monocular depth. It was trained on 25 000 synthetic driving images and
+ranked on a hidden 2 500-image test set by a single multitask score (segmentation mIoU minus depth SI-logRMSE).
+
+## Approach
+
+The project ran in two stages: first build and understand a strong model from its parts, then spend a fixed 48-hour
+GPU budget on the best model we could deploy.
+
+### Stage 1: DeepLabV3+ from the building blocks
+
+<Flow
+  label="Multi-task DeepLabV3+ model and tuning loop"
+  steps={[
+    { title: 'Shared encoder', sub: 'ImageNet-pretrained ResNet' },
+    { title: 'ASPP', sub: 'atrous pyramid for multi-scale context', kind: 'model' },
+    { title: 'Task decoders', sub: 'separate segmentation and depth heads with skip connections', kind: 'model' },
+    { title: 'Multi-scale inference', sub: 'test-time scales fused per task' },
+  ]}
+  feedback="Optuna TPE search over architecture + training hyperparameters, with trial pruning"
+/>
+
+- ASPP, task-specific decoders and skip connections were implemented by hand in PyTorch and ablated one at a time.
+- An Optuna campaign (TPE sampler, pruning) searched architecture and training choices together, and multi-scale
+  inference was added on top: validation score **69.84 → 76.68**, test **76.69**.
+- PyTorch Lightning and W&B recorded every run's configuration, checkpoint, metrics and hardware use: 87 runs.
+
+<Figure src={arch} alt="Architecture diagram of the multi-task DeepLabV3+ network" caption="The stage-1 multi-task architecture." />
+
+### Stage 2: a foundation model, adapted to two tasks
+
+- **Backbone:** the official, pinned **Depth Anything 3 Metric Large** checkpoint: a ViT-L/14 encoder with a DPT depth
+  head.
+- **Second head:** a copy of the DPT head becomes a 19-class segmentation decoder that shares the encoder (features
+  from layers 4, 11, 17, 23). It inherits the pretrained reconstruction weights; only its final classifier is new.
+- **Training:** cross-entropy + Lovász for segmentation, SILog for depth, a learnable depth scale initialised from
+  training labels only, and separate AdamW learning rates for encoder, depth head and segmentation head. BF16 with
+  activation checkpointing fits it on one RTX 5080.
+- **Budget-aware tuning:** a small Optuna search with 12-epoch trials and pruning, then a fresh 24-epoch retrain of the
+  winner. Everything was accounted against the 48 GPU-hour budget (41.5 h used).
+- **Test-time augmentation:** scales 0.75 / 1 / 1.25 with horizontal flips and geometric averaging of depth. This beat
+  an ensemble with the stage-1 ResNet model (80.35).
+
+<BarCompare
+  title="Multitask score through the project"
+  afterName="score"
+  max={100}
+  rows={[
+    { label: 'DeepLabV3+, hand-tuned (val)', after: 69.84 },
+    { label: 'DeepLabV3+ + Optuna + multi-scale (test)', after: 76.69 },
+    { label: 'DA3, first 30-epoch run (val)', after: 79.77 },
+    { label: 'DA3 tuned + TTA (val)', after: 81.11 },
+    { label: 'DA3 final submission (test)', after: 81.15 },
+  ]}
+  caption="Validation numbers are on the full 2 500-image split; test numbers are from Codabench. The validation score predicted the test score to within 0.04."
+/>
+
+## Results
+
+The final submission placed **1st** on the course leaderboard: **81.15** multitask, **91.65** mIoU and **10.5**
+SI-logRMSE, ahead of 80.28 for 2nd place and 74.36 for 3rd.
+
+<Figure src={seg} alt="Grid comparing segmentation predictions of several model variants against ground truth" caption="Segmentation across stage-1 model variants." basis="validation" wide />
+<Figure src={depth} alt="Grid comparing depth predictions of several model variants" caption="Depth predictions across the same variants." basis="validation" wide />
+<Figure src={optuna} alt="Optuna optimisation history with pruned and completed trials" caption="Stage-1 Optuna history: pruned trials (stopped early) versus completed ones." basis="validation" />
+
+## What I learned
+
+- **Know the model, then pick the best one.** Building DeepLabV3+ by hand made it clear what a foundation model brings:
+  depth features that a 25 000-image dataset can't teach.
+- **Treat compute as a budget.** Short pruned trials, then one long retrain of the winner, got the most out of 48 GPU
+  hours.
+- **Trust validation you've audited.** Exact export round-trips on the full validation split made the leaderboard
+  result predictable (81.11 val vs 81.15 test).

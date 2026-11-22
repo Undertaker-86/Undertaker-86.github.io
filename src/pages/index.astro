@@ -1,0 +1,149 @@
+---
+import Base from '~/layouts/Base.astro';
+import ProjectCard from '~/components/ProjectCard.astro';
+import Contact from '~/components/Contact.astro';
+import { getProjects } from '~/lib/projects';
+import { site, education, roles, publications } from '~/site.config';
+
+const projects = await getProjects();
+const featured = projects.filter((p) => p.data.featured);
+const others = projects.filter((p) => !p.data.featured);
+
+// bento layout: one large card, then rows of three; the last card fills an incomplete row
+const span = (i: number) => {
+  if (i === 0) return 'lg:col-span-2 lg:row-span-2';
+  const rest = featured.length - 3; // cards after the first row group
+  const isLast = i === featured.length - 1;
+  if (isLast && rest % 3 === 2) return 'lg:col-span-2';
+  if (isLast && rest % 3 === 1) return 'lg:col-span-3';
+  return '';
+};
+---
+
+<Base active="home">
+  <!-- ============================== hero -->
+  <section class="relative isolate overflow-hidden border-b border-line">
+    <div class="grid-bg absolute inset-0 -z-20 opacity-60 [mask-image:linear-gradient(to_bottom,#000,transparent)]"></div>
+    <div class="wrap pt-16 pb-14 sm:pt-24 sm:pb-20">
+      <p class="eyebrow rise">M.Sc. Robotics, Systems &amp; Control · ETH Zurich</p>
+      <h1 class="rise mt-4 max-w-3xl text-[2.6rem] leading-[1.02] font-semibold text-ink sm:text-6xl lg:text-7xl" style="--d:60ms">
+        {site.name}
+      </h1>
+      <p class="rise mt-5 max-w-2xl text-lg leading-relaxed text-ink-2 sm:text-xl" style="--d:120ms">
+        Robotics engineer: <span class="text-ink">learning-based control</span>, <span class="text-ink">perception</span> and
+        <span class="text-ink">embedded systems</span>. I train humanoids to kick in Isaac Lab, write flight controllers from
+        scratch, and report negative results when that's what the data says.
+      </p>
+      <div class="rise mt-8 flex flex-wrap gap-3" style="--d:180ms">
+        <a href="/projects" class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent transition hover:brightness-110">
+          View projects <span aria-hidden="true">→</span>
+        </a>
+        <a href="/about" class="inline-flex items-center gap-2 rounded-lg border border-line-strong px-4 py-2.5 text-sm font-medium text-ink transition hover:border-ink-3">About</a>
+        <a href="#contact" class="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-ink-2 transition hover:text-ink">Get in touch</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== featured bento -->
+  <section class="wrap py-16 sm:py-24" aria-labelledby="featured-h">
+    <div class="mb-8 flex items-end justify-between gap-4">
+      <div>
+        <p class="eyebrow">Selected work</p>
+        <h2 id="featured-h" class="mt-2 text-3xl font-semibold text-ink sm:text-4xl">Featured projects</h2>
+      </div>
+      <a href="/projects" class="link shrink-0 text-sm">All {projects.length} projects →</a>
+    </div>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {featured.map((p, i) => <ProjectCard project={p} size={i === 0 ? 'lg' : 'md'} class={span(i)} eager={i === 0} index={i} />)}
+    </div>
+
+    <h3 class="eyebrow mt-14 mb-4">More projects</h3>
+    <ul class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {
+        others.map((p) => (
+          <li>
+            <a href={`/projects/${p.id}`} class="card group flex h-full flex-col gap-1 p-4 transition-colors hover:border-line-strong">
+              <span class="eyebrow">{p.data.context.split('·')[0].trim()}</span>
+              <span class="font-medium text-ink group-hover:text-accent-ink">{p.data.title}</span>
+              {p.data.headline && <span class="font-mono text-xs text-ink-3">{p.data.headline}</span>}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </section>
+
+  <!-- ============================== education + experience -->
+  <section class="border-y border-line bg-sunk/60">
+    <div class="wrap grid gap-14 py-16 sm:py-20 lg:grid-cols-[1fr_1.4fr]">
+      <div aria-labelledby="edu-h">
+        <p class="eyebrow">Education</p>
+        <h2 id="edu-h" class="mt-2 mb-6 text-3xl font-semibold text-ink">Degrees</h2>
+        <ol class="space-y-4">
+          {
+            education.map((e) => (
+              <li class="reveal card p-5">
+                <p class="font-mono text-xs text-ink-3">{e.dates}</p>
+                <p class="mt-1 font-semibold text-ink">{e.degree}</p>
+                <p class="text-sm text-ink-2">{e.school} · {e.place}</p>
+                {e.school.startsWith('University') && <p class="mt-2 text-sm text-ink-3">{e.detail}</p>}
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+      <div aria-labelledby="exp-h">
+        <p class="eyebrow">Experience</p>
+        <h2 id="exp-h" class="mt-2 mb-6 text-3xl font-semibold text-ink">Roles</h2>
+        <ol class="relative space-y-6 border-l border-line-strong pl-6">
+          {
+            roles.map((r, i) => (
+              <li class="reveal relative">
+                <span class:list={['absolute top-1.5 rounded-full', i === 0 ? '-left-[1.95rem] size-3 border-2 border-accent bg-bg' : '-left-[1.8rem] size-2 bg-line-strong']} />
+                <p class="font-mono text-xs text-ink-3">{r.dates}</p>
+                <p class="mt-0.5 text-ink">
+                  <span class="font-medium">{r.role}</span> <span class="text-ink-2">· {r.org}</span>
+                </p>
+                {r.project && <a href={`/projects/${r.project}`} class="link text-sm">Case study →</a>}
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== publications -->
+  <section id="publications" class="wrap py-16 sm:py-20" aria-labelledby="pub-h">
+    <div class="mb-8 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p class="eyebrow">Research</p>
+        <h2 id="pub-h" class="mt-2 text-3xl font-semibold text-ink">Publications</h2>
+      </div>
+      {
+        site.scholar.show && site.scholar.href && (
+          <a href={site.scholar.href} rel="noopener" class="inline-flex items-center gap-2 rounded-lg border border-line-strong px-3.5 py-2 text-sm font-medium text-ink transition hover:border-accent hover:text-accent-ink">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3 1 9l11 6 9-4.91V17h2V9L12 3zm-6 9.74v3.92L12 20l6-3.34v-3.92L12 16l-6-3.26z" /></svg>
+            Google Scholar ↗
+          </a>
+        )
+      }
+    </div>
+    <ol class="divide-y divide-line border-y border-line">
+      {
+        publications.map((p) => (
+          <li class="reveal grid gap-1 py-5 sm:grid-cols-[5rem_1fr] sm:gap-6">
+            <span class="font-mono text-sm text-ink-3">{p.year}</span>
+            <div>
+              <a href={p.href} class="font-medium text-ink decoration-accent/50 underline-offset-4 hover:underline" rel="noopener">{p.title}</a>
+              <p class="mt-1 text-sm text-ink-2" set:html={p.authors.replace('G. E. Zesiro', '<strong class="text-ink font-semibold">G. E. Zesiro</strong>')} />
+              <p class="mt-0.5 text-sm text-ink-3 italic">{p.venue}</p>
+            </div>
+          </li>
+        ))
+      }
+    </ol>
+  </section>
+
+  <Contact />
+</Base>

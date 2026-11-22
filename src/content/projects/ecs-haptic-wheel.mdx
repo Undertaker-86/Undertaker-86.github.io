@@ -1,0 +1,77 @@
+---
+title: 'Haptic wheel: force-feedback virtual worlds on a microcontroller'
+short: 'Haptic wheel (ECS)'
+summary: 'Bare-metal C firmware on an NXP S32K144 that turns a motorised wheel into a haptic knob: springs, walls, dampers, a virtual mass and clicky detents, rendered by a 1 kHz interrupt, with Simulink-generated code and CAN networking.'
+org: 'ETH Zurich'
+context: 'Embedded Control Systems (course labs)'
+role: 'Firmware: sensing, actuation and haptic worlds in C; Simulink/Stateflow models'
+team: 'Course lab work'
+start: 2026-09-15
+end: 2026-12-15
+categories: ['Embedded', 'Planning & Control', 'Hardware/Mechanical']
+stack: ['Embedded C', 'NXP S32K144 (Arm Cortex-M4F)', 'FTM quadrature decoder', 'LPIT · PWM · ADC', 'FlexCAN', 'Simulink / Stateflow codegen']
+featured: false
+order: 11
+cover: '../../assets/ecs-haptic-wheel/cover.png'
+coverAlt: 'Torque–angle laws of the haptic worlds: virtual wall, spring and 45-degree detents'
+headline: '1 kHz haptic loop in bare-metal C'
+metrics:
+  - { value: '1 kHz', label: 'Haptic rendering rate (LPIT timer interrupt)', basis: 'hardware' }
+  - { value: '6', label: 'Virtual worlds: spring, wall, spring-damper, wall-damper, spring-mass, detents', basis: 'hardware' }
+  - { value: '45°', label: 'Detent spacing of the “clicky knob” world', basis: 'hardware' }
+codeNote: 'Course solution code is not published, per ETH course policy.'
+---
+
+import EcsDiagram from '~/components/EcsDiagram.astro';
+import LineChart from '~/components/LineChart.astro';
+import ecs from '~/data/charts/ecs.json';
+
+## Problem
+
+A haptic interface lets software decide what a physical knob *feels* like: a spring that pulls back to centre, a hard
+wall, a heavy flywheel, or click-stops like a volume dial. Making that convincing on a small microcontroller is
+a real-time control problem. The loop has to sense, compute and actuate fast enough, and with stable enough timing,
+that a stiff virtual wall doesn't buzz or go unstable.
+
+## Approach
+
+<EcsDiagram />
+
+- **Peripherals in C.** The firmware integrates the quadrature decoder (FTM), ADC, PWM, the periodic interrupt timer
+  (LPIT), UART and FlexCAN, each behind a small C interface.
+- **One interrupt closes the loop.** At 1 kHz the ISR reads the wheel angle, estimates velocity by finite
+  difference, evaluates the selected world and writes a PWM duty cycle. Nothing else is allowed to block it.
+- **Worlds as torque laws.** Springs and walls are stiffness laws. Dampers add a velocity term. The spring-mass world
+  integrates a virtual mass coupled to the wheel by a spring, so the knob feels like it drags a flywheel. The detent
+  world applies a periodic restoring torque every 45°.
+- **Model-based design.** The same worlds were modelled in Simulink/Stateflow and deployed as auto-generated C. Two
+  boards were then networked over **CAN** to exchange state.
+
+## Results
+
+<LineChart
+  title="Torque laws rendered by the firmware"
+  xLabel="wheel angle (°)"
+  yLabel="torque command (firmware units)"
+  xDomain={[-90, 90]}
+  yDomain={[-2500, 2500]}
+  xTicks={[-90, -45, 0, 45, 90]}
+  series={[
+    { name: 'virtual spring (k = 50)', x: ecs.angle, y: ecs.spring, tone: 'muted' },
+    { name: '45° detents (peak 250, ×4 for visibility)', x: ecs.angle, y: ecs.detent.map((v) => v * 4), tone: 'accent' },
+  ]}
+  basis="hardware"
+  caption="Computed from the constants in the lab firmware. The wall (k = 500, engaged below 0°) is ten times stiffer than the spring and leaves the plot range."
+/>
+
+The worlds range from a soft centring spring to a wall ten times stiffer, plus damped, inertial and detent variants,
+all rendered by the same 1 kHz interrupt.
+
+## What I learned
+
+- **Stiffness is limited by the loop, not the math.** A virtual wall can only be as stiff as sample rate, encoder
+  resolution and velocity noise allow. That is why the wall world also has a damped variant.
+- **Discretisation choices are physics choices.** How the spring-mass world integrates its state at 1 kHz decides
+  whether the virtual flywheel gains or loses energy.
+- **Hand-written vs generated code.** Writing the drivers by hand made the generated Simulink code easy to trust and
+  debug, because I knew exactly what sat underneath it.

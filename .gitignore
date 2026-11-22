@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.astro/
+.devpath
+qa/out/
+private/
+scripts/media-sizes.log

@@ -1,0 +1,217 @@
+---
+title: 'Teaching a humanoid to kick into a goal'
+short: 'NomadZ kicking'
+summary: 'An RL kicking skill for the Booster K1: eight learning approaches compared head-to-head, then the best one (PPO + adversarial motion prior) trained from 40 % to 73 % far-goal rate on a 5 000-shot MuJoCo benchmark.'
+org: 'ETH Zurich'
+context: 'NomadZ RoboCup team · Motion Control & Robot Learning'
+role: 'Chose the approach, built the tasks, rewards and benchmarks, trained and evaluated every policy'
+team: 'NomadZ team (shared training framework); kicking skill by me'
+start: 2026-11-01
+categories: ['Robotics', 'Learning & RL', 'Planning & Control']
+stack: ['Isaac Sim 5.1', 'Isaac Lab 2.3.2', 'rsl_rl (PPO + AMP)', 'MuJoCo', 'Diffusion policy', 'PyTorch · RTX 5080']
+featured: true
+order: 1
+cover: '../../assets/nomadz-kicking/film-a1-poster.jpg'
+coverAlt: 'Camera flying over 100 parallel Isaac Lab training environments, each with a K1 humanoid, a ball and a goal'
+video: 'film-a1'
+headline: '40 → 73 % far-goal rate'
+metrics:
+  - { value: '73.4 %', label: 'Goals from far (3.75–4.5 m); started at 39.5 %', basis: 'simulation', note: 'mean of 3 × 5 000-shot runs' }
+  - { value: '90.5 %', label: 'Goals from close (1.5–2.25 m); started at 81.2 %', basis: 'simulation' }
+  - { value: '82 %', label: 'All distances, vs. 66.9 % for the best other approach', basis: 'simulation' }
+  - { value: '7 → 0.3 %', label: 'Falls after far kicks', basis: 'simulation' }
+links:
+  - { label: 'Detailed technical write-up', href: '/projects/nomadz-kicking/details' }
+codeNote: 'The code lives in the NomadZ team repositories, which are not public.'
+credits: 'Built on the NomadZ training framework (nomadz_lab), Booster’s K1 model and firmware kick recordings, and Booster Deploy for sim-to-sim.'
+---
+
+import Figure from '~/components/Figure.astro';
+import Flow from '~/components/Flow.astro';
+import BarCompare from '~/components/BarCompare.astro';
+import LongVideo from '~/components/LongVideo.astro';
+import widePoster from '~/assets/nomadz-kicking/best-wide-poster.jpg';
+import armsPoster from '~/assets/nomadz-kicking/arms-2x2-poster.jpg';
+import gridPoster from '~/assets/nomadz-kicking/kick-grid-poster.jpg';
+import labPoster from '~/assets/nomadz-kicking/k1-lab-poster.jpg';
+
+## Problem
+
+In RoboCup humanoid soccer a kick that merely *touches* the ball is useless. The robot has to walk up to a ball that
+may still be rolling, plant its support foot, and put the ball **inside a 2.6 m goal** from up to 4.5 m away. It does
+this from its own noisy, delayed camera estimate of the ball, and it must not fall. The K1's firmware ships a scripted
+kick, but it is open-loop: it neither aims nor adapts to where the ball actually is.
+
+The goal was one learned skill that does approach, kick and aim together and survives the jump to a different
+physics engine, as a first step towards the real robot.
+
+## Approach
+
+### Part 1: eight ways to learn a kick, tested on the same shots
+
+Rather than bet on one method, I set up a fair comparison. Every approach ("arm") was evaluated on identical,
+seeded scenarios in **MuJoCo**, a different physics engine from the Isaac Lab training simulator. That makes every
+result a sim-to-sim transfer test.
+
+| Arm | Approach | What happened |
+|---|---|---|
+| A0 | Firmware kick (scripted baseline) | open loop in sim: falls every time |
+| **A1** | **PPO + adversarial motion prior (AMP) on firmware kick clips + task reward** | **best-transferring learned kick** |
+| A2 | Tracker of the firmware kick + kick inputs, two stages | stage 2 did not converge |
+| A3 | Pure PPO, no motion prior | swings at the ball; worst transfer |
+| A4 / A5 | Multi-clip motion trackers (incl. a SuperMimic port to the K1) | track held-out clips, strike too imprecise |
+| A6 | Diffusion policy trained on A1's rollouts | matches A1 with fewer falls, ~16× slower to run |
+| A7a / A7b | Firmware tracker / residual RL on top of it | A7b is the most improved arm |
+
+<Figure
+  video={{ slug: 'nomadz-kicking', name: 'arms-2x2', poster: armsPoster }}
+  alt="Four simulated K1 robots taking the same 1.9 m shot in MuJoCo: A1, A6 and A7b kick, pure-PPO A3 falls"
+  caption="The same 1.9 m shot in MuJoCo. Top: A1 (PPO + AMP) and A6 (diffusion on A1 data). Bottom: A7b (residual on the firmware kick) and A3 (pure PPO), which falls before reaching the ball."
+  basis="simulation"
+/>
+
+The first benchmark asked for a kick in a *commanded direction*. Learned arms touched the ball 93–95 % of the time,
+but the median direction error was 23–28°, flat across directions: scatter, not bias. So I moved to the task that
+actually matters, **scoring in a goal**, with a 5 000-shot benchmark (1.5–4.5 m, up to ±50° off-axis).
+
+<BarCompare
+  title="Goal rate by approach, all distances (13 Nov)"
+  afterName="goal rate"
+  unit=" %"
+  max={100}
+  rows={[
+    { label: 'A6 diffusion on goal-A1 data', after: 66.9 },
+    { label: 'A1 goal-trained', after: 60.7 },
+    { label: 'A7b goal-trained', after: 51.5 },
+    { label: 'A3 pure PPO', after: 28.5 },
+    { label: 'A7a firmware tracker', after: 2.2 },
+    { label: 'A0 firmware kick', after: 0.2 },
+  ]}
+  basis="simulation"
+  caption="MuJoCo goal benchmark, identical 5 000 shots per arm. Three lessons carried forward: motion priors transfer and pure PPO doesn't (A3 falls in most shots); far shots were the weakness (A1: 81 % close, 40 % far, missing wide and short); and the first goal reward was hacked: A1 learned to shove close balls with its shin until I gated rewards on a clean foot contact."
+/>
+
+### Part 2: making A1's far shot work
+
+<Flow
+  label="Training and validation loop for the goal-kicking policy"
+  steps={[
+    { title: 'Firmware kick clips', sub: '8 native K1 clips at 50 Hz as the style prior', kind: 'io' },
+    { title: 'Isaac Lab goal task', sub: 'thousands of parallel envs, domain randomisation, 200 Hz physics / 50 Hz policy' },
+    { title: 'PPO + AMP', sub: 'rsl_rl; goal reward v2', kind: 'model' },
+    { title: 'Perception model', sub: 'ball estimate with camera rate, latency, FOV, noise, dropouts' },
+    { title: 'MuJoCo benchmark', sub: 'quick screens every 250 it; full 5 000-shot validation', kind: 'io' },
+  ]}
+  feedback="one change at a time · restart from the best checkpoint · decide on full validations only (±1 pt run-to-run)"
+/>
+
+Each change came from reading the previous result:
+
+<BarCompare
+  title="Far-goal rate (3.75–4.5 m) after each change"
+  afterName="far goals"
+  unit=" %"
+  max={100}
+  rows={[
+    { label: 'Start (A1 goal-trained)', after: 39.5 },
+    { label: '1 · Goal reward v2', after: 56 },
+    { label: '2 · Longer credit (γ 0.997, λ 0.99)', after: 59 },
+    { label: '3 · Ball-rolling fix', after: 65 },
+    { label: '4 · Set-up factor', after: 67 },
+    { label: '5 · Longer ball history', after: 73.4 },
+  ]}
+  basis="simulation"
+  caption="Full 5 000-shot validation of each step's best checkpoint."
+/>
+
+1. **Goal reward v2:** a distance factor, an on-target launch-speed reward, revoking credit after a re-touch, a
+   fall claw-back, 15 s episodes, and training with both torque modes.
+2. **Longer credit assignment:** the set-up step happens ~0.5 s before the kick is paid, so γ 0.997, λ 0.99 and
+   64-step rollouts.
+3. **The ball-rolling fix, the biggest surprise.** Training randomised rolling resistance from 0.4 to 1.2, while the
+   field fit is 0.64. At the high end, far shots were *physically unreachable*, so the policy learned to kick harder
+   instead of straighter. Narrowing the range to 0.45–0.85 unblocked aim.
+4. **Set-up factor:** a first touch before 0.3 s pays 0.3×, which cut rushed first touches from 15 % to 2 % of far shots.
+5. **Longer ball history:** 300 ms of past detections instead of 80 ms. It only helped *after* the rolling fix let
+   aim improve.
+
+Eight further ideas did not beat the best: lower KL, a reach reward, oversampling, weight averaging, a hand-built
+ball filter as input, lower action noise and more. Training past a peak always drifted down, so the process became
+"restart from the best, change one thing".
+
+## Results
+
+<Figure
+  video={{ slug: 'nomadz-kicking', name: 'best-wide', poster: widePoster }}
+  alt="The best policy in MuJoCo: the K1 walks up to the ball and kicks it into the goal, shot after shot"
+  caption="The best policy on the first validation shots (MuJoCo, wide view). Overlays give goal distance, bearing, approach angle and outcome."
+  basis="simulation"
+/>
+
+<LongVideo
+  src="/media/nomadz-kicking/best-wide-full.mp4"
+  poster={widePoster}
+  title="Watch all 100 validation shots of the best policy"
+  size="9.8 MB, 7 min"
+  caption="Wide view of every shot in the 100-shot set (25 per distance band), with goal distance, bearing, approach angle and outcome overlaid. Misses are framed red."
+  basis="simulation"
+/>
+
+| Full validation, 5 000 shots | Start (A1) | Best |
+|---|---|---|
+| Far goals, 3.75–4.5 m | 39.5 % | **73.4 %** |
+| Close goals, 1.5–2.25 m | 81.2 % | **90.5 %** |
+| All distances | 60.7 % | **82.0 %** |
+| Clean far goals (foot first, no re-touch) | ~29 % | **69 %** |
+| Falls on far shots (7 s after the kick) | 7 % | **0.3 %** |
+
+<Figure
+  video={{ slug: 'nomadz-kicking', name: 'kick-grid', poster: gridPoster }}
+  alt="Grid of 100 simulated shots of the best policy; each tile is framed green for a goal and red for a miss"
+  caption="The same 100 shots at once: green = goal, red = miss."
+  basis="simulation"
+/>
+
+**The kick is good enough; the camera is not.** I re-ran every model under three camera models. On the same 1 220 far
+shots the best policy scores:
+
+<BarCompare
+  title="Same policy, same far shots, three camera models"
+  afterName="far goals"
+  unit=" %"
+  max={100}
+  rows={[
+    { label: 'Benchmark camera', after: 73 },
+    { label: 'Low noise (keeps latency + dropouts)', after: 89 },
+    { label: 'Perfect camera', after: 90 },
+  ]}
+  basis="simulation"
+  caption="236 of its 313 far misses go in with the low-noise camera. Earlier models scored 56 / 66 / 68 % under the same three cameras: there, the kick itself was the limit."
+/>
+
+Beyond perception, the policy is strongly **right-footed**: left-foot kicks are 13 % of far shots and score 39 %, against
+80 % with the right foot. Balls very close to the robot, balls off to the side and steep approach angles cost 9–17
+points each, and mesh-shaped foot colliders score a few points below box feet, which matters for the real robot.
+
+<Figure
+  video={{ slug: 'nomadz-kicking', name: 'k1-lab', poster: labPoster }}
+  alt="The real Booster K1 humanoid walking up to a ball on the NomadZ lab field"
+  caption="The Booster K1 on the team's lab field. The learned kick has not been run on hardware yet; every number above is from simulation."
+  basis="hardware"
+  narrow
+/>
+
+## What I learned
+
+- **Compare approaches on the same shots, in a different simulator.** Pure PPO had the *best* clean-goal rate in Isaac
+  Lab and the worst in MuJoCo. Only a cross-engine benchmark exposed that.
+- **Measure the noise floor before tuning.** Quick screens moved ±3 points. Deciding only on full validations
+  (±1 point) stopped me from "improving" the policy by chance.
+- **Fix the physics before the reward.** An over-wide randomisation range made the task impossible in a third of the
+  environments, and no reward change could fix that.
+- **Separate the error budget.** Swapping the camera model showed that ~17 far points are lost in perception. That
+  makes a learned ball estimator the next step, ahead of more kick training.
+- The [detailed write-up](/projects/nomadz-kicking/details) covers the policy interface, domain randomisation,
+  reward terms, the benchmark protocol and the full training changelog.
+- Also in this role: a video → motion pipeline (GVHMR → SMPL, GMR retargeting to the K1, DeepMimic imitation in
+  Isaac Lab, MuJoCo sim-to-sim via Booster Deploy) and RL policies for passing.

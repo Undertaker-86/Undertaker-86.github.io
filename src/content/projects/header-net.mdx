@@ -1,0 +1,98 @@
+---
+title: 'Header Net: detecting soccer headers in broadcast video'
+short: 'Header Net'
+summary: 'A ball-centred video transformer pipeline that finds heading events in full soccer matches, so head-impact exposure can be measured at scale instead of by hand.'
+org: 'University of British Columbia'
+context: 'SimPL Biomedical Sensing Lab'
+role: 'Machine Learning Engineer: dataset, preprocessing, training, tuning and evaluation'
+team: 'Supervised by Prof. Lyndia Wu and Dr. Ahmad Rezaei'
+start: 2025-09-01
+end: 2026-06-30
+categories: ['Perception', 'Learning & RL']
+stack: ['PyTorch', 'VideoMAE V2', 'RF-DETR', 'Kalman filter', 'Optuna', 'Slurm · DDP · AMP']
+featured: true
+order: 3
+cover: '../../assets/header-net/cover.png'
+coverAlt: 'Grad-CAM heat maps over six frames of a header clip, concentrated on the player and the ball'
+headline: '80.3 % precision · 70.4 % recall'
+metrics:
+  - { value: '70.4 %', label: 'Recall on the held-out test matches', basis: 'test' }
+  - { value: '80.3 %', label: 'Precision on the held-out test matches', basis: 'test' }
+  - { value: '−50 %', label: 'Training time after moving to Slurm HPC', basis: 'experiment' }
+  - { value: '+5 / +3 pts', label: 'Recall / precision gained by Optuna tuning', basis: 'test' }
+codeNote: 'Lab code is not public.'
+credits: 'Header annotations from a previous PhD student and in-house labelling; SoccerNet broadcast data.'
+---
+
+import Figure from '~/components/Figure.astro';
+import Flow from '~/components/Flow.astro';
+import BarCompare from '~/components/BarCompare.astro';
+import gradcam from '~/assets/header-net/gradcam.png';
+import gallery from '~/assets/header-net/correct-gallery.jpg';
+import focal from '~/assets/header-net/focal-loss.png';
+
+## Problem
+
+Headers are the most frequent head impact in soccer, and repeated heading has been linked to cognitive decline and
+structural changes in the brain. Measuring exposure today means wearable sensors, which are inaccurate, or people
+watching footage, which does not scale (one study needed 135 matches of manual review to log ~9 000 headers). The
+question was whether headers can be found **automatically and accurately in ordinary broadcast video**.
+
+A header lasts a few frames, the ball is a few pixels wide in a wide broadcast shot, and almost every frame is
+negative. That makes the problem a needle-in-a-haystack action-recognition problem.
+
+## Approach
+
+<Flow
+  label="Header detection pipeline from broadcast video to header events"
+  steps={[
+    { title: 'Broadcast video', sub: 'every frame decoded (SoccerNet matches)', kind: 'io' },
+    { title: 'RF-DETR ball detector', sub: 'SoccerNet-fine-tuned; top-k ball candidates per frame' },
+    { title: 'Kalman smoothing', sub: 'constant-velocity [x, y, vx, vy] removes misses and distractors' },
+    { title: 'Ball-centred 16-frame clips', sub: 'crop follows the smoothed ball', kind: 'model' },
+    { title: 'VideoMAE V2 classifier', sub: 'Base (87 M) / Giant (1 B); focal loss, 10:1 neg:pos sampling', kind: 'model' },
+  ]}
+/>
+
+- **Look where the ball is.** Cropping each clip around the Kalman-smoothed ball trajectory beat feeding the full
+  frame. The model sees the head–ball contact at a usable resolution.
+- **Dense, reproducible preprocessing.** Every frame becomes one row of a Parquet dataset with its smoothed ball box
+  and label. Positives are widened to a window matched to the video's frame rate, and clips that would run off the
+  video are dropped, so training needs no runtime padding.
+- **Imbalance handled twice.** Focal loss down-weights easy negatives, and a deterministic 10:1 negative:positive
+  sampler keeps every epoch comparable.
+- **Scale and tune.** The Giant backbone runs with DDP, mixed precision and gradient checkpointing on 24 GB GPUs
+  under Slurm. Optuna then searches focal α, γ and the sampling ratio per backbone.
+
+<Figure src={focal} alt="Focal loss curves for several gamma values compared with cross-entropy" caption="Focal loss: larger γ flattens the loss on easy, well-classified negatives so the rare headers dominate the gradient." />
+
+## Results
+
+<BarCompare
+  title="Before tuning: does backbone scale help?"
+  beforeName="VideoMAE V2 Base (epoch 30)"
+  afterName="VideoMAE V2 Giant (epoch 7)"
+  unit=" %"
+  max={100}
+  rows={[
+    { label: 'Recall @ 80 % precision', before: 57.1, after: 66.1 },
+    { label: 'Precision @ 80 % recall', before: 38.8, after: 50.4 },
+  ]}
+  basis="test"
+  caption="Operating points from the course report, before hyperparameter search. The 1 B-parameter Giant was still training and already led across the whole precision–recall curve."
+/>
+
+Optuna tuning then added about **5 points of recall and 3 of precision**. The final model reaches **70.4 % recall at
+80.3 % precision** on held-out test matches, close to the 80 %/80 % target set at the start.
+
+<Figure src={gradcam} alt="Grad-CAM attention across six frames of a correctly detected header" caption="Grad-CAM on a correctly detected header: attention stays on the player's head and the ball through the contact." />
+<Figure src={gallery} alt="Gallery of correctly detected header clips" caption="Correctly detected headers from the test matches." />
+
+## What I learned
+
+- **Put the inductive bias in the data.** One preprocessing decision, cropping around a tracked ball, mattered more
+  than any architecture change.
+- **Infrastructure is a research result.** Moving to Slurm with DDP and AMP halved training time. That is what made
+  a Giant backbone and an Optuna search affordable at all.
+- **Report operating points, not one number.** For a screening tool the useful question is "how many headers do we
+  miss at a precision researchers can work with?", so I report full PR curves and fixed-precision/recall points.

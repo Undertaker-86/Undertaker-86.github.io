@@ -1,0 +1,77 @@
+---
+import { Picture } from 'astro:assets';
+import Base from '~/layouts/Base.astro';
+import Contact from '~/components/Contact.astro';
+import { site, education, skills } from '~/site.config';
+import type { ImageMetadata } from 'astro';
+// The portrait ships only if it was copied into src/assets/profile/ AND site.photo.show is true.
+const found = Object.values(import.meta.glob<{ default: ImageMetadata }>('/src/assets/profile/*.{jpg,jpeg,png}', { eager: true }));
+const photo = site.photo.show ? found[0]?.default : undefined;
+---
+
+<Base title="About" active="about">
+  <section class="wrap grid gap-10 pt-14 sm:pt-20 lg:grid-cols-[1fr_20rem] lg:gap-16">
+    <div>
+      <p class="eyebrow">About</p>
+      <h1 class="mt-2 text-4xl font-semibold text-ink sm:text-5xl">Hi, I'm Gyan.</h1>
+      <div class="prose mt-6 max-w-2xl">
+        <p>
+          I'm an M.Sc. student in <strong>Robotics, Systems and Control at ETH Zurich</strong>, after a B.A.Sc. in
+          Mechanical Engineering (Mechatronics) at UBC, where I graduated Cum Laude.
+        </p>
+        <p>
+          My work sits where learning meets hardware. I train <strong>reinforcement-learning policies for humanoids</strong>
+          with the NomadZ RoboCup team, build <strong>perception pipelines</strong> from video and point clouds, and write
+          <strong>embedded control</strong> firmware down to the timer interrupt. Before ETH I led the controls team of UBC's
+          autonomous submarine and did research in two UBC labs on biomedical sensing and microfluidics, which led to four
+          publications.
+        </p>
+        <p>
+          I care about evidence. Every number on this site names its basis (simulation, hardware, validation or test), and
+          when an idea doesn't work, as in my <a href="/projects/scene-graph-localization">scene-graph localization study</a>,
+          I report why.
+        </p>
+      </div>
+    </div>
+    {
+      photo && (
+        <div class="reveal">
+          <Picture src={photo} alt={`Portrait of ${site.name}`} widths={[320, 640]} sizes="20rem" formats={['avif', 'webp']} class="w-full rounded-2xl border border-line object-cover" />
+        </div>
+      )
+    }
+  </section>
+
+  <section class="wrap mt-16 grid gap-10 lg:grid-cols-2">
+    <div>
+      <h2 class="eyebrow mb-4">Education</h2>
+      <ul class="space-y-5">
+        {
+          education.map((e) => (
+            <li class="card p-5">
+              <p class="font-mono text-xs text-ink-3">{e.dates}</p>
+              <p class="mt-1 font-semibold text-ink">{e.degree}</p>
+              <p class="text-sm text-ink-2">{e.school} · {e.place}</p>
+              <p class="mt-2 text-sm leading-relaxed text-ink-3">{e.detail}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+    <div>
+      <h2 class="eyebrow mb-4">Toolbox</h2>
+      <dl class="divide-y divide-line border-y border-line">
+        {
+          Object.entries(skills).map(([k, v]) => (
+            <div class="grid gap-1 py-4 sm:grid-cols-[11rem_1fr]">
+              <dt class="text-sm font-medium text-ink">{k}</dt>
+              <dd class="text-sm leading-relaxed text-ink-2">{v}</dd>
+            </div>
+          ))
+        }
+      </dl>
+      <p class="mt-4 text-sm text-ink-3">Languages: English (fluent), Indonesian (native), German (learning).</p>
+    </div>
+  </section>
+  <div class="mt-20"><Contact /></div>
+</Base>

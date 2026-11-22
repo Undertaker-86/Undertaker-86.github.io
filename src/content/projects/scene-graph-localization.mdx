@@ -1,0 +1,110 @@
+---
+title: 'When is a robot confidently wrong? Indoor localization on scene graphs'
+short: 'Scene-graph localization'
+summary: 'A study of map uncertainty in an SG2Loc-style semantic particle filter on Replica, 3RScan, RIO10 and Hydra maps. The proposed map model did not beat the baseline on real data; two simpler changes did, and the study shows why.'
+org: 'ETH Zurich'
+context: 'Vision Algorithms for Mobile Robotics · course project'
+role: 'Hypothesis, simulator, experiments, statistics and write-up'
+team: 'VAMR course project, ETH Zurich'
+start: 2026-11-01
+end: 2026-11-30
+categories: ['Perception', 'Robotics']
+stack: ['Python', 'Particle filters', 'DINOv2', 'Hydra (ROS 2)', '3RScan · RIO10 · Replica', 'Paired bootstrap']
+featured: true
+order: 7
+cover: '../../assets/scene-graph-localization/localizer-poster.jpg'
+coverAlt: 'Animated particle filter localizing a camera on a top-down object map, plain versus map-uncertainty model'
+video: 'localizer'
+headline: 'An honest negative result'
+metrics:
+  - { value: '0.40 → 0.28', label: 'Wrong-in-top-50 % on 3RScan with the new “chain” confidence', basis: 'validation' }
+  - { value: '0.35 → 0.23', label: 'Same on RIO10', basis: 'validation' }
+  - { value: '46 %', label: 'Object patches given the wrong object by DINOv2 labels: the real bottleneck', basis: 'validation' }
+  - { value: '0.53 → 0.65', label: 'RIO10 success with structure-aware labels (baseline filter)', basis: 'validation' }
+codeNote: 'Course project code is not published, per ETH course policy.'
+---
+
+import Figure from '~/components/Figure.astro';
+import Flow from '~/components/Flow.astro';
+import BarCompare from '~/components/BarCompare.astro';
+import hydraPoster from '~/assets/scene-graph-localization/hydra-poster.jpg';
+import failure from '~/assets/scene-graph-localization/failure-3rv04.png';
+import confirm from '~/assets/scene-graph-localization/confirm-3rv12.png';
+
+## Problem
+
+A robot that localizes against an object-level map (a 3D scene graph) can be wrong in two ways. It can be wrong and
+know it, which is harmless because it asks again. Or it can be **wrong and confident**, which is how robots drive
+into walls. Maps built by systems like Hydra are themselves uncertain: objects drift with odometry error, and chairs
+move between visits.
+
+**Hypothesis.** In a sequential semantic particle filter (SG2Loc-style), model the map's object-placement uncertainty
+compactly as a few **shared 4-DoF group transforms plus per-object residuals**, and integrate over it as a persistent
+latent. This should cut confidently wrong localizations compared with a fixed map, a temperature-tuned fixed map, and
+independent per-object noise.
+
+## Approach
+
+<Flow
+  label="Experimental pipeline"
+  steps={[
+    { title: 'Maps', sub: 'Replica (controlled) · Hydra with drift · 3RScan / RIO10 rescans', kind: 'io' },
+    { title: 'Observations', sub: 'DINOv2 patch labels + depth per frame' },
+    { title: 'Particle filter', sub: 'coarse → fine search over pose, 5-frame sequences' },
+    { title: 'Map model', sub: 'shared group transforms + residuals, sampled map versions', kind: 'model' },
+    { title: 'Selective-risk metrics', sub: 'wrong-in-top-50 %, confidently-wrong @ 0.9, ECE; paired bootstrap CIs', kind: 'io' },
+  ]}
+/>
+
+I worked to the standards I'd expect from a paper reviewer:
+
+- **Splits and decision rules fixed before each run**, with locked test sets opened once (502 sequences in the first
+  test round, 836 in the second).
+- **Common random particles**, so every model reports the *same* pose and differs only in confidence. Every comparison
+  is exactly paired.
+- **Strong controls, not just the baseline.** A plain filter rerun with a different seed, a tempered plain filter, and
+  independent noise of the same size as the map model. If those match the map model, the map model is not the
+  reason.
+
+<Figure video={{ slug: 'scene-graph-localization', name: 'hydra', poster: hydraPoster }} alt="Hydra building a layered 3D scene graph of a Replica room next to the camera view and its labels" caption="Hydra building the layered scene graph (objects, places, room) that the robot later localizes in." basis="simulation" />
+
+## Results
+
+**The map model did not beat the plain filter on real data.** On fresh 3RScan and RIO10 test rooms it was never
+significantly worse, but never significantly better, and it tied the simple controls. Under large smooth drift (Hydra)
+it helped, but a tempered plain filter helped just as much. The study shows why:
+
+1. **Half the apparent gap was particle-filter noise.** Rerunning the plain filter with another seed flips success
+   on 10–12 % of queries.
+2. **A better confidence signal.** I replaced "mass of the coarse search" with a *chain* confidence (coarse mass near
+   the answer × fine mass near the answer). This helps every model, plain included.
+3. **The observations are the bottleneck, and simulation hid it.** On real images 84 % of wall/floor patches get an
+   object label and 46 % of object patches get the wrong object. The simulator confused only 20 %.
+4. **Fixing the labels was the biggest win.** Structure-aware labels (a patch that best matches a wall or floor gets
+   no object label) cut spurious labels from 0.84 to 0.12 on 3RScan.
+
+<BarCompare
+  title="Share of the most-confident half that is wrong"
+  lowerIsBetter
+  beforeName="old confidence"
+  afterName="chain confidence"
+  max={0.5}
+  rows={[
+    { label: '3RScan', before: 0.4, after: 0.28 },
+    { label: 'RIO10', before: 0.35, after: 0.23 },
+  ]}
+  basis="validation"
+  caption="Plain (fixed-map) filter, session-1 validation rows. The new confidence ranks queries better regardless of map model."
+/>
+
+<Figure src={failure} alt="Failure browser: camera view with mislabelled floor patches and top-down particles of both filters converging on the same wrong place" caption="A confidently wrong case: 110 spurious labels on the floor pull both filters to the same wrong place, so no map model can notice." wide />
+<Figure src={confirm} alt="Failure browser: the map-model filter confirms a correct answer that the plain filter was unsure about" caption="Where the second filter helps: it confirms a correct pose that plain was unsure about." wide />
+
+## What I learned
+
+- **A clean negative result is a result.** "Map-geometry uncertainty is not what makes this localizer confidently
+  wrong; label noise and visible-object count are" is a useful finding for the next person.
+- **Controls beat baselines.** Without the seed-B and tempered controls, several runs would have looked like wins
+  for my model.
+- **Measure the real noise before trusting a simulator.** One measurement of real label noise changed which
+  direction the whole project should go.

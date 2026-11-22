@@ -1,0 +1,108 @@
+---
+import Base from '~/layouts/Base.astro';
+import ProjectCard from '~/components/ProjectCard.astro';
+import { getProjects } from '~/lib/projects';
+import { CATEGORIES, categorySlug } from '~/content.config';
+
+const projects = await getProjects();
+const counts = Object.fromEntries(CATEGORIES.map((c) => [c, projects.filter((p) => p.data.categories.includes(c)).length]));
+---
+
+<Base title="Projects" active="projects" description="All robotics, learning, perception, planning, embedded and hardware projects by Gyan Edbert Zesiro.">
+  <section class="wrap pt-14 pb-6 sm:pt-20">
+    <p class="eyebrow">Index</p>
+    <h1 class="mt-2 text-4xl font-semibold text-ink sm:text-5xl">Projects</h1>
+    <p class="mt-4 max-w-2xl text-lg text-ink-2">
+      {projects.length} case studies, from humanoid RL to microfluidics. Every metric names its basis (simulation,
+      hardware, validation or test) and traces to a report, a log or the CV.
+    </p>
+
+    <nav aria-label="Filter projects by area" class="mt-8 -mx-4 overflow-x-auto px-4 pb-1">
+      <ul class="flex w-max gap-2" data-filters>
+        <li>
+          <a href="/projects" data-cat="" class="filter-chip" aria-current="true">All <span class="opacity-60">{projects.length}</span></a>
+        </li>
+        {
+          CATEGORIES.map((c) => (
+            <li>
+              <a href={`/projects?area=${categorySlug(c)}`} data-cat={categorySlug(c)} class="filter-chip">
+                {c} <span class="opacity-60">{counts[c]}</span>
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </nav>
+    <p class="sr-only" aria-live="polite" data-filter-status></p>
+  </section>
+
+  <section class="wrap pb-10">
+    <h2 class="sr-only">Project list</h2>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" data-project-grid>
+      {projects.map((p, i) => <ProjectCard project={p} index={i} eager={i < 2} />)}
+    </div>
+    <p class="mt-8 hidden text-center text-ink-3" data-empty>No projects in this area.</p>
+  </section>
+</Base>
+
+<script>
+  // Filter island: progressive enhancement over plain links; state lives in ?area=
+  const apply = (cat: string, push: boolean) => {
+    const grid = document.querySelector('[data-project-grid]');
+    if (!grid) return;
+    let shown = 0;
+    grid.querySelectorAll<HTMLElement>('[data-cats]').forEach((el) => {
+      const on = !cat || el.dataset.cats!.split(' ').includes(cat);
+      el.hidden = !on;
+      if (on) shown++;
+    });
+    document.querySelectorAll<HTMLAnchorElement>('[data-filters] a').forEach((a) => {
+      a.setAttribute('aria-current', String(a.dataset.cat === cat));
+    });
+    document.querySelector('[data-empty]')?.classList.toggle('hidden', shown > 0);
+    const st = document.querySelector('[data-filter-status]');
+    if (st) st.textContent = `${shown} project${shown === 1 ? '' : 's'} shown`;
+    if (push) {
+      const u = new URL(location.href);
+      cat ? u.searchParams.set('area', cat) : u.searchParams.delete('area');
+      history.replaceState(history.state, '', u);
+    }
+  };
+  document.addEventListener('astro:page-load', () => {
+    const bar = document.querySelector<HTMLElement>('[data-filters]');
+    if (!bar) return;
+    const valid = new Set([...bar.querySelectorAll<HTMLAnchorElement>('a')].map((a) => a.dataset.cat));
+    const initial = new URLSearchParams(location.search).get('area') ?? '';
+    apply(valid.has(initial) ? initial : '', false);
+    bar.querySelectorAll<HTMLAnchorElement>('a').forEach((a) =>
+      a.addEventListener('click', (e) => {
+        e.preventDefault();
+        apply(a.dataset.cat ?? '', true);
+      }),
+    );
+  });
+</script>
+
+<style>
+  .filter-chip {
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: center;
+    border: 1px solid var(--line-strong);
+    border-radius: 999px;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.85rem;
+    color: var(--ink-2);
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .filter-chip:hover {
+    color: var(--ink);
+    border-color: var(--ink-3);
+  }
+  .filter-chip[aria-current='true'] {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--bg);
+  }
+</style>

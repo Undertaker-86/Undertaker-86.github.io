@@ -1,0 +1,91 @@
+---
+title: 'Porous media for a self-regulating microfluidic valve'
+short: 'Porous-media valve'
+summary: 'OCT image analysis of porous scaffolds, plus microfluidic experiments and a flow–pressure model for a valve whose porous core stiffens its own resistance. The work fed two conference papers.'
+org: 'University of British Columbia'
+context: 'Stoeber Lab (microfluidics)'
+role: 'Computer Vision Engineer: OCT pipeline, experimental rig, flow experiments and modelling'
+team: 'Y. Cheng, S. Ma, Prof. B. Stoeber and me'
+start: 2025-01-01
+end: 2025-09-30
+categories: ['Perception', 'Signal processing', 'Hardware/Mechanical']
+stack: ['Optical coherence tomography', 'Python · scikit-image', 'MATLAB', 'C# acquisition GUI', 'SolidWorks', 'Darcy-law modelling']
+featured: false
+order: 10
+cover: '../../assets/stoeber-porous-valve/cover.png'
+coverAlt: 'Measured flow rate versus pressure drop for increasing compression of the porous valve'
+headline: '3.7 % NRMSE pore-size pipeline'
+metrics:
+  - { value: '3.7 %', label: 'NRMSE of the OCT pore-size pipeline', basis: 'experiment' }
+  - { value: '+6 dB', label: 'SNR gain from the redesigned flow rig', basis: 'experiment' }
+  - { value: '2', label: 'Papers: IEEE MEMS 2026 and APS DFD 2025', basis: 'team result' }
+links:
+  - { label: 'IEEE MEMS 2026 paper', href: 'https://ieeexplore.ieee.org/document/11419604' }
+  - { label: 'APS DFD 2025 abstract', href: 'https://meetings-archive.aps.org/dfd/2025/c33/1/' }
+codeNote: 'Lab code and data are not public.'
+credits: 'With first author Y. Cheng and Prof. Boris Stoeber; co-author on both papers.'
+---
+
+import Figure from '~/components/Figure.astro';
+import Flow from '~/components/Flow.astro';
+import LineChart from '~/components/LineChart.astro';
+import cdf from '~/assets/stoeber-porous-valve/pore-cdf.png';
+import data from '~/data/charts/stoeber.json';
+
+## Problem
+
+Microfluidic devices often need a flow rate that stays steady while the driving pressure varies. Usually that takes
+active control. This project studied a **passive** alternative: a valve whose core is a soft porous material. As
+pressure compresses it, its pores close and its hydraulic resistance rises, so the valve regulates itself. Designing
+one requires knowing the material's pore structure, how its permeability changes with strain, and how fast it
+relaxes.
+
+## Approach
+
+<Flow
+  label="Characterisation pipeline for the porous valve material"
+  steps={[
+    { title: 'OCT imaging', sub: 'volumetric scans of porous scaffolds (µm resolution)', kind: 'io' },
+    { title: 'Adaptive thresholding', sub: 'local thresholds + cleanup → pore segmentation', kind: 'model' },
+    { title: 'Pore statistics', sub: 'pore-area distributions per sample' },
+    { title: 'Flow experiments', sub: 'pressure-driven flow at set compressions', kind: 'io' },
+    { title: 'Models', sub: 'Darcy permeability, flow–pressure law, poroviscoelastic time constant', kind: 'model' },
+  ]}
+/>
+
+- **Pore sizes from OCT.** I built the image-processing pipeline: surface extraction, local (adaptive) thresholding
+  and cleanup. Its pore-size distributions came within **3.7 % NRMSE**. I swept block size and cleanup radius to show
+  the result is stable, not tuned to one setting.
+- **A cleaner flow rig.** I designed the fixture in CAD and assembled the setup, raising measurement SNR by **6 dB**.
+  I then ran permeability experiments across a sweep of compressions, discarding pressure-step transients before
+  fitting.
+- **Models.** I proposed a flow-rate–pressure model based on the material's deformation profile, and isolated the
+  poroviscoelastic time constant from indentation relaxation tests (the APS DFD contribution).
+
+<Figure src={cdf} alt="Cumulative distributions of pore area for many threshold block sizes" caption="Pore-area CDFs across adaptive-threshold block sizes: the distribution settles once the block is large enough." basis="experiment" />
+
+## Results
+
+<LineChart
+  title="Hydraulic resistance rises steeply with compression"
+  xLabel="compressive strain (%)"
+  yLabel="resistance (×10⁹ Pa·s/m³)"
+  xDomain={[0, 50]}
+  yDomain={[0, 1400]}
+  series={[{ name: 'measured', x: data.strain.map((s) => s * 100), y: data.resistance_GPa_s_per_m3, tone: 'accent', markers: true }]}
+  basis="experiment"
+  caption="Each point is a line fit of flow against pressure at one compression. Resistance stays nearly flat to ~30 % strain and then climbs by more than an order of magnitude: this is the self-regulating behaviour the valve exploits."
+/>
+
+The work contributed to *A Self-Regulating Microfluidic Valve Based on Deformable Porous Media* (IEEE MEMS 2026,
+Salzburg) and *Characterizing the Poroelastic Time Scale of a Poroviscoelastic Medium using Indentation Tests*
+(APS DFD 2025, Houston).
+
+## What I learned
+
+- **Validate the measurement before the model.** The rig redesign (+6 dB) changed which effects were even visible in
+  the data.
+- **Prove a vision pipeline is stable.** Sensitivity sweeps over the free parameters is more convincing than one
+  good-looking segmentation.
+- **Experimental physics needs software discipline.** Separating preprocessing (unit conversion, transient removal)
+  from analysis made every figure reproducible from raw logs.

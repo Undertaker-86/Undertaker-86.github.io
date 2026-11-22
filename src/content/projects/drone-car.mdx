@@ -1,0 +1,93 @@
+---
+title: 'Drone Car: a transforming quadcopter / RC car'
+short: 'Drone Car'
+summary: 'A dual-mode robot whose four rotor-wheel pods tilt between driving and flying, with a flight controller I wrote from scratch on a Teensy 4.0. It drives well and transforms reliably; its marginal flight taught the key trade-off.'
+org: 'University of British Columbia'
+context: 'MECH 423 Mechatronic Product Design · final project'
+role: 'Owned the flight controller, sensor fusion and power electronics; Ryan Nashota owned the airframe and pods'
+team: 'Two-person team: Gyan Zesiro and Ryan Nashota'
+start: 2026-01-05
+end: 2026-04-30
+categories: ['Robotics', 'Embedded', 'Hardware/Mechanical', 'Planning & Control']
+stack: ['Teensy 4.0 (C++)', 'Complementary filter', 'Cascaded PID', 'SolidWorks', '3D printing · sheet metal', 'Custom power board']
+featured: true
+order: 4
+cover: '../../assets/drone-car/transform-poster.jpg'
+coverAlt: 'The transforming robot on a lab bench with its four wheel-propeller pods'
+video: 'transform'
+headline: '1 kHz from-scratch flight controller'
+metrics:
+  - { value: '1 kHz', label: 'Sensor-fusion + attitude-control loop on a Teensy 4.0', basis: 'hardware' }
+  - { value: '≈ 10 s', label: 'Full car ↔ drone transformation with magnetic locking', basis: 'hardware' }
+  - { value: '> 0.8 m/s', label: 'Sustained ground speed over a 15 m straight', basis: 'hardware' }
+  - { value: '3.4 / 2.5 kg', label: 'Total thrust vs. vehicle mass: enough to lift, too little to control well', basis: 'hardware' }
+codeNote: 'Course project; code not published.'
+credits: 'Built with Ryan Nashota. Concept inspired by Caltech’s M4 Morphobot.'
+---
+
+import Figure from '~/components/Figure.astro';
+import Flow from '~/components/Flow.astro';
+import carMode from '~/assets/drone-car/car-mode.jpg';
+import droneMode from '~/assets/drone-car/drone-mode.jpg';
+import cad from '~/assets/drone-car/cad-exploded.jpg';
+import showcasePoster from '~/assets/drone-car/showcase-poster.jpg';
+import imuPoster from '~/assets/drone-car/imu-poster.jpg';
+
+## Problem
+
+Most robots do one kind of locomotion well. A ground robot is efficient but stops at the first obstacle it can't
+climb, and a drone can go anywhere but burns its battery just staying up. Inspired by Caltech's M4 Morphobot, we
+built one robot that **drives on its wheels and turns those same wheels into rotors** when it needs to fly over
+something. Making one set of hardware do both jobs is the hard part.
+
+## Approach
+
+<Flow
+  label="Five functional subsystems of the transforming robot"
+  steps={[
+    { title: 'Morphing airframe', sub: 'servo-driven parallel sheet-metal arms tilt each pod 90°' },
+    { title: 'Rotor-wheel pods', sub: 'EMAX 2812 1100 KV motor in a PETG duct with a rubber tread' },
+    { title: 'Power distribution', sub: 'custom board: LiPo → logic rails + high-current ESC feed' },
+    { title: 'Flight controller', sub: 'Teensy 4.0: complementary filter @ 1 kHz + cascaded PID + mixing', kind: 'model' },
+    { title: 'Telemetry', sub: 'live IMU, actuator and PID state streamed to a laptop', kind: 'io' },
+  ]}
+/>
+
+- **One part, two jobs.** The outside of each 3D-printed propeller duct carries a rubber tread, so the duct is also the
+  tyre. Servos tilt the pods between flat (wheels) and upright (rotors), and rare-earth magnets snap them into place.
+- **Flight controller from scratch (my part).** I wrote the firmware myself: a complementary filter fuses accelerometer and gyro
+  at 1 kHz, feeding a cascaded attitude PID and motor mixing. The PID is tuned for a mass distribution that changes
+  between modes. Telemetry is non-blocking so the serial link can never stall the control loop.
+- **Bench-tested before integration.** A load-cell thrust stand compared 8″ and 9″ propellers. We chose the 8″ for
+  its faster spool-up, which attitude control needs, at the cost of some peak thrust.
+
+<div class="grid gap-3 sm:grid-cols-2">
+  <Figure src={carMode} alt="Robot in car mode with annotated wheels, drive gears and drone motors" caption="Car mode: pods locked flat, ducts act as tyres." basis="hardware" />
+  <Figure src={droneMode} alt="Robot in drone mode with annotated servo arms and motor/wheel pods" caption="Drone mode: servo arms tilt the pods upright." basis="hardware" />
+</div>
+
+<Figure src={cad} alt="Exploded CAD view of one rotor-wheel pod showing wheel, printed bearing and drone motor cap" caption="Exploded CAD of a pod: wheel/duct, printed bearing and motor cap." />
+
+## Results
+
+- **Transformation works.** A full flat-to-upright cycle takes **about 10 s**, and the magnetic locks give a firm,
+  audible snap and keep the pods aligned.
+- **Driving works.** The robot held **over 0.8 m/s** across a 15 m straight, and a tethered sled-tow test confirmed
+  the treads grip on tile and concrete.
+- **Flight was marginal, and that is the main lesson.** Bare, each motor makes > 1 kg of thrust. With duct and tread it
+  drops to ~850 g, or **3.4 kg total for a 2.5 kg robot**. That is enough to lift off, but the treads and metal
+  hubs sit far out on the arms. The resulting rotational inertia left too little control margin, so the robot hopped
+  and oscillated instead of hovering.
+
+<Figure video={{ slug: 'drone-car', name: 'imu', poster: imuPoster }} alt="Laptop showing live orientation telemetry while the robot is tilted by hand" caption="Sensor fusion on the bench: tilting the robot by hand moves the live attitude estimate." basis="hardware" />
+<Figure video={{ slug: 'drone-car', name: 'showcase', poster: showcasePoster }} alt="Operator spinning the robot's rotors from an RC transmitter on the bench" caption="Mode switching and rotor spin-up from the RC transmitter." basis="hardware" />
+
+## What I learned
+
+- **Mass and inertia budgets come first.** Each part that made the robot tougher on the ground made it worse in the
+  air. A next version would use micro servos, a carbon-tube frame and lighter treads, and budget inertia rather
+  than only mass.
+- **Real-time firmware is about what you don't do in the loop.** At 1 kHz, a blocking serial print is a crash. Timing
+  discipline mattered as much as the control law.
+- **Integration surfaces the unmodelled.** Parts that worked alone interfered once assembled: motor current noise
+  corrupted I²C sensor data. Power and signal isolation have to be designed in from the start.

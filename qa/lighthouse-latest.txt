@@ -1,0 +1,8 @@
+/                                {'perf': 99, 'acce': 100, 'best': 100, 'seo': 100}  LCP  2.2 s  CLS     0  TBT   0 ms  Total size was 282 KiB
+/projects                        {'perf': 98, 'acce': 100, 'best': 100, 'seo': 100}  LCP  2.3 s  CLS     0  TBT   0 ms  Total size was 535 KiB
+/projects/nomadz-kicking         {'perf': 99, 'acce': 100, 'best': 100, 'seo': 100}  LCP  2.0 s  CLS     0  TBT   0 ms  Total size was 404 KiB
+/projects/drone-car              {'perf': 99, 'acce': 100, 'best': 100, 'seo': 100}  LCP  2.0 s  CLS     0  TBT  40 ms  Total size was 1,514 KiB
+/projects/pdm4ar                 {'perf': 98, 'acce': 100, 'best': 100, 'seo': 100}  LCP  2.2 s  CLS     0  TBT   0 ms  Total size was 304 KiB
+/projects/stethoscope            {'perf': 99, 'acce': 100, 'best': 100, 'seo': 100}  LCP  1.8 s  CLS     0  TBT   0 ms  Total size was 140 KiB
+/about                           {'perf': 100, 'acce': 100, 'best': 100, 'seo': 100}  LCP  1.5 s  CLS     0  TBT   0 ms  Total size was 107 KiB
+/cv                              {'perf': 99, 'acce': 100, 'best': 100, 'seo': 100}  LCP  1.8 s  CLS     0  TBT   0 ms  Total size was 109 KiB

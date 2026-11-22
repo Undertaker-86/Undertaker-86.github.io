@@ -1,0 +1,66 @@
+---
+/**
+ * Before/after horizontal bars, zero JS. "Before" is neutral, "after" carries the accent.
+ * Legend always present; each bar is direct-labelled and has a native hover tooltip.
+ */
+interface Row {
+  label: string;
+  before?: number;
+  after: number;
+}
+interface Props {
+  rows: Row[];
+  max: number;
+  unit?: string;
+  beforeName?: string;
+  afterName: string;
+  title: string;
+  caption?: string;
+  basis?: string;
+  lowerIsBetter?: boolean;
+}
+const { rows, max, unit = '', beforeName, afterName, title, caption, basis, lowerIsBetter = false } = Astro.props;
+const pct = (v: number) => `${Math.max(0, Math.min(100, (v / max) * 100))}%`;
+const fmt = (v: number) => `${Number.isInteger(v) ? v : v.toFixed(v < 1 ? 2 : 1)}${unit}`;
+---
+
+<figure class="reveal my-8">
+  <div class="card p-4 sm:p-5">
+    <div class="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+      <p class="text-sm font-semibold text-ink">{title}{lowerIsBetter && <span class="font-normal text-ink-3"> (lower is better)</span>}</p>
+      <ul class="flex gap-4 text-xs text-ink-2" aria-label="Legend">
+        {beforeName && (<li class="flex items-center gap-1.5"><span class="inline-block h-2.5 w-2.5 rounded-sm bg-ink-3/60"></span>{beforeName}</li>)}
+        <li class="flex items-center gap-1.5"><span class="inline-block h-2.5 w-2.5 rounded-sm bg-accent"></span>{afterName}</li>
+      </ul>
+    </div>
+    <dl class="space-y-3.5">
+      {
+        rows.map((r) => (
+          <div class="grid grid-cols-1 gap-1 sm:grid-cols-[9.5rem_1fr] sm:items-center sm:gap-4">
+            <dt class="text-sm text-ink-2">{r.label}</dt>
+            <dd class="space-y-[2px]">
+              {r.before !== undefined && (
+                <div class="flex items-center gap-2" title={`${r.label}: ${beforeName} ${fmt(r.before)}`}>
+                  <span class="h-2.5 rounded-r bg-ink-3/60" style={`width:${pct(r.before)}`} />
+                  <span class="font-mono text-xs text-ink-3 tabular-nums">{fmt(r.before)}</span>
+                </div>
+              )}
+              <div class="flex items-center gap-2" title={`${r.label}: ${afterName} ${fmt(r.after)}`}>
+                <span class="h-2.5 rounded-r bg-accent" style={`width:${pct(r.after)}`} />
+                <span class="font-mono text-xs text-ink tabular-nums">{fmt(r.after)}</span>
+              </div>
+            </dd>
+          </div>
+        ))
+      }
+    </dl>
+  </div>
+  {
+    (caption || basis) && (
+      <figcaption class="mt-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-ink-3">
+        {basis && <span class="chip !py-0 !text-[0.65rem] uppercase">{basis}</span>}
+        <span>{caption}</span>
+      </figcaption>
+    )
+  }
+</figure>

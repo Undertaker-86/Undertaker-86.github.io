@@ -1,0 +1,109 @@
+---
+title: 'Steelhead AUV: control and autonomy for RoboSub'
+short: 'UBC Subbots'
+summary: 'Led the 9-person control team of UBC Subbots’ autonomous submarine: a ROS 2 pipeline from state estimation to thrust allocation, PID control and a Gazebo digital twin. Top 10 of about 200 teams at RoboSub.'
+org: 'University of British Columbia'
+context: 'UBC Subbots student design team'
+role: 'Control Systems Lead (9 members): controller design and tuning, navigation, simulation, integration and testing'
+team: 'UBC Subbots (51 members); co-author of the 2024–2026 technical design reports'
+start: 2023-08-01
+end: 2025-12-31
+categories: ['Robotics', 'Planning & Control', 'Perception']
+stack: ['ROS 2 (C++ / Python)', 'UKF + VINS-Mono', 'PID control', 'Gazebo', 'YOLOv8 + OpenCV', 'Docker on Radxa X4']
+featured: true
+order: 5
+cover: '../../assets/subbots/cad-poster.png'
+coverAlt: 'CAD model of the Steelhead autonomous underwater vehicle'
+model: { src: '/media/subbots/steelhead.glb', size: '2.3 MB' }
+headline: 'Top 10 of ~200 teams'
+metrics:
+  - { value: 'Top 10', label: 'Finish among ~200 teams at RoboSub', basis: 'team result' }
+  - { value: '−32 %', label: 'Steady-state error after I designed and tuned the PID controller', basis: 'experiment' }
+  - { value: '−50 %', label: 'Development time with the URDF/Gazebo digital twin', basis: 'experiment' }
+  - { value: '9', label: 'Engineers on the control systems team I led', basis: 'team result' }
+links:
+  - { label: 'Technical design report (RoboSub 2026)', href: 'https://robonation.org/app/uploads/sites/4/2026/07/RS26_TDR_UnivBritishColumbia.pdf' }
+  - { label: 'Steelhead ROS 2 repository', href: 'https://github.com/ubc-subbots/steelhead' }
+credits: 'Steelhead is a whole-team effort: mechanical (frame, enclosures, claw, torpedoes), electrical (power, BMS), software and acoustics sub-teams. See the technical design report for the full author list.'
+---
+
+import Figure from '~/components/Figure.astro';
+import Flow from '~/components/Flow.astro';
+import arch from '~/assets/subbots/system-architecture.png';
+import yolo from '~/assets/subbots/yolo.jpg';
+import cfd from '~/assets/subbots/torpedo-cfd.png';
+import claw from '~/assets/subbots/claw-dropper.png';
+
+
+## Problem
+
+RoboSub asks a student-built AUV to complete an underwater course **fully autonomously**: pass a gate, slalom through
+a channel, drop markers into a bin and fire torpedoes through small openings. There is no GPS underwater,
+visibility is poor and pool time is scarce. The vehicle has to hold depth and heading against buoyancy and currents
+on six thrusters, and the software has to be testable when the sub is **not** in the water. The team logged 70 h of
+simulation testing for the 2026 entry.
+
+## Approach
+
+### The control pipeline
+
+<Flow
+  label="Steelhead control pipeline"
+  steps={[
+    { title: 'State estimation', sub: 'UKF fusing the 9-DoF IMU and other sensors; VINS-Mono for the initial pose', kind: 'io' },
+    { title: 'Trajectory generator', sub: 'turns vision targets into waypoints that keep the target in view' },
+    { title: 'Waypoint system', sub: 'tracks the active goal, publishes the error, advances on arrival' },
+    { title: 'Controller', sub: 'PID on every degree of freedom, gains tunable at runtime', kind: 'model' },
+    { title: 'Thrust allocator', sub: 'SVD pseudo-inverse over 6 T200s → 5-bit commands to a Teensy', kind: 'model' },
+  ]}
+  feedback="BehaviorTree mission planner: one subtree per task, actions re-tried when a condition is lost"
+/>
+
+- **Thrust allocation.** The allocator builds the 6×6 map from each thruster's force direction and lever arm about the
+  centre of mass, two of them angled, and inverts it with an SVD pseudo-inverse. Each desired force and torque becomes
+  per-thruster thrust, which is encoded into 5-bit levels within the T200's forward and reverse limits (3.71 / 2.92 kgf)
+  and streamed over USB serial to a Teensy that drives the ESCs.
+- **Control.** I designed and tuned the **PID controller** that runs on every degree of freedom, with gains exposed
+  as ROS 2 parameters so they can be retuned on the pool deck. The tuning reduced steady-state error by **32 %**.
+- **Leading the team.** Nine engineers worked in parallel through documented package conventions, an issue/PR
+  workflow and Docker images that deploy the whole stack to a spare single-board computer in minutes.
+
+### A digital twin before pool time
+
+I brought the vehicle into **Gazebo**: the URDF/SDF model with the real frame meshes, inertia and damping, plus the
+team's plugins for buoyancy and hydrodynamic forces, thruster drivers, pressure and camera sensors, and the
+competition props modelled to scale. Controllers and missions could be developed and replayed without the pool, which
+**halved development time**.
+
+<Figure src={arch} alt="Steelhead ROS 2 system architecture diagram" caption="System architecture from the public Steelhead repository." />
+
+### Perception
+
+Gates and markers are found by HSV segmentation and convex hulls after lens and enclosure undistortion, giving
+relative poses as control targets. The 2026 stack adds a YOLOv8 detector fine-tuned on Unity-generated underwater
+images, and an Intel RealSense D455 with RTAB-Map for a redundant map of the course.
+
+<div class="grid gap-3 sm:grid-cols-2">
+  <Figure src={yolo} alt="Underwater camera frame with YOLO boxes on a gate and torpedo targets" caption="Detections on the gate and torpedo targets in pool footage." basis="hardware" />
+  <Figure src={claw} alt="CAD of the claw with its integrated marker dropper" caption="The claw with its integrated marker dropper: one servo for both tasks." />
+</div>
+
+## Results
+
+- The team placed in the **top 10 of about 200 teams** at RoboSub.
+- PID control: **−32 % steady-state error**. Gazebo twin: **−50 % development time**. Both are from the team's own testing.
+- Steelhead's design, from machined aluminium enclosures and custom neoprene seals to the software and acoustic
+  localization, is documented in the public
+  [technical design report](https://robonation.org/app/uploads/sites/4/2026/07/RS26_TDR_UnivBritishColumbia.pdf), which
+  I co-authored, and in the [Steelhead repository](https://github.com/ubc-subbots/steelhead).
+
+<Figure src={cfd} alt="Ansys CFD static pressure contours on the torpedo body" caption="Torpedo CFD by the mechanical team: one of the subsystems the control stack actuates." />
+
+## What I learned
+
+- **Leading engineers is mostly about interfaces.** Clear topic contracts between estimation, waypoints, control and
+  allocation let nine people work in parallel without breaking each other's code.
+- **Simulation pays for itself fast** when real test time is the bottleneck. The digital twin was the highest-leverage
+  thing we built.
+- **Keep the last mile simple.** A pseudo-inverse allocator and a serial link to a microcontroller are easy to reason
+  about during a pool test; the sophistication belongs in the layers above.

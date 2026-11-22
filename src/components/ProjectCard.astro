@@ -1,0 +1,82 @@
+---
+import { Picture } from 'astro:assets';
+import VideoLoop from './VideoLoop.astro';
+import { categorySlug } from '~/content.config';
+import { years, type Project } from '~/lib/projects';
+
+interface Props {
+  project: Project;
+  size?: 'lg' | 'md' | 'sm';
+  eager?: boolean;
+  class?: string;
+  index?: number;
+}
+const { project: p, size = 'md', eager = false, class: cls, index = 0 } = Astro.props;
+const d = p.data;
+const sizes = size === 'lg' ? '(min-width: 1024px) 760px, 100vw' : '(min-width: 1024px) 380px, (min-width: 640px) 50vw, 100vw';
+const widths = size === 'lg' ? [480, 760, 1100, 1400] : [400, 600, 800];
+---
+
+<article
+  class:list={['reveal group card relative flex flex-col overflow-hidden transition-colors hover:border-line-strong', cls]}
+  data-hover-host
+  data-cats={d.categories.map(categorySlug).join(' ')}
+  style={`--d:${(index % 3) * 70}ms`}
+>
+  <div
+    class:list={['relative overflow-hidden border-b border-line bg-sunk', size === 'lg' ? 'aspect-[16/10] lg:aspect-auto lg:min-h-0 lg:flex-1' : 'aspect-[16/10]']}
+    transition:name={`media-${p.id}`}
+  >
+    {
+      d.video ? (
+        <VideoLoop slug={p.id} name={d.video} poster={d.cover} alt={d.coverAlt} posterWidth={size === 'lg' ? 1100 : 720} sizes={sizes} position={size === 'lg' ? 'object-left' : ''} class="absolute inset-0 transition-transform duration-700 group-hover:scale-[1.02]" eager={eager} />
+      ) : (
+        <Picture
+          src={d.cover}
+          alt={d.coverAlt}
+          formats={['avif', 'webp']}
+          widths={widths.filter((w) => w <= d.cover.width)}
+          sizes={sizes}
+          quality={70}
+          loading={eager ? 'eager' : 'lazy'}
+          fetchpriority={eager ? 'high' : 'auto'}
+          class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.02]"
+        />
+      )
+    }
+    {
+      d.award && (
+        <span class="pointer-events-none absolute top-3 right-3 flex items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 font-mono text-[0.68rem] font-semibold text-on-accent shadow-lg">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z" /></svg>
+          {d.award}
+        </span>
+      )
+    }
+    {
+      d.video && (
+        <span class="pointer-events-none absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-1 font-mono text-[0.62rem] text-white/85 backdrop-blur">
+          <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><path d="M1 0.5 L7.5 4 L1 7.5Z" fill="currentColor" /></svg>
+          loop
+        </span>
+      )
+    }
+  </div>
+  <div class="flex flex-col gap-2 p-4 sm:p-5">
+    <div class="flex items-center justify-between gap-3">
+      <p class="eyebrow truncate">{d.context.split('·')[0].trim()}</p>
+      <p class="eyebrow shrink-0">{years(p)}</p>
+    </div>
+    <h3 class:list={['font-semibold tracking-tight text-ink', size === 'lg' ? 'text-xl sm:text-2xl' : 'text-lg']}>
+      <a href={`/projects/${p.id}`} class="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{d.title}</a>
+    </h3>
+    {size !== 'sm' && <p class="line-clamp-3 text-sm leading-relaxed text-ink-2">{d.summary}</p>}
+    {d.headline && <p class="mt-1 font-mono text-sm text-accent-ink">{d.headline}</p>}
+  </div>
+</article>
+
+<style>
+  article:has(a:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+</style>

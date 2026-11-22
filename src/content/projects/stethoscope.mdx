@@ -1,0 +1,98 @@
+---
+title: 'Wearable digital stethoscope: signal processing for heart sounds'
+short: 'Wearable stethoscope'
+summary: 'A wearable acoustic sensor for continuous organ-sound monitoring, with filtering and source separation (STFT, wavelets, NMF) that pull a clean heartbeat out of body and ambient noise.'
+org: 'University of British Columbia'
+context: 'SimPL Biomedical Sensing Lab'
+role: 'DSP student assistant: filtering, source separation, beat detection, recorder hardware and documentation'
+team: 'SimPL lab stethoscope project'
+start: 2024-04-01
+end: 2024-08-31
+categories: ['Signal processing', 'Embedded', 'Hardware/Mechanical']
+stack: ['Python · SciPy', 'FIR / IIR band-pass', 'STFT · wavelets', 'Non-negative matrix factorisation', 'Microcontroller audio logging']
+featured: false
+order: 9
+cover: '../../assets/stethoscope/cover.png'
+coverAlt: 'Raw and band-passed heart-sound waveform from the wearable stethoscope'
+headline: '+12 dB SNR · 96 % beat sensitivity'
+metrics:
+  - { value: '+12 dB', label: 'SNR improvement from the band-pass design', basis: 'experiment' }
+  - { value: '96 %', label: 'Beat-detection sensitivity', basis: 'experiment' }
+  - { value: '20 ms', label: 'Processing latency', basis: 'experiment' }
+links:
+  - { label: 'Project documentation site', href: 'https://simpl-ubc.github.io/Stethoscope_Project/intro.html' }
+codeNote: 'Lab code is not public; the documentation site is.'
+credits: 'Sample recording from the lab stethoscope’s SD-card logger (SimPL Capstone 2025 build).'
+---
+
+import Flow from '~/components/Flow.astro';
+import LineChart from '~/components/LineChart.astro';
+import data from '~/data/charts/stethoscope.json';
+
+## Problem
+
+A stethoscope gives one listen at one moment. A **wearable** one could record heart and lung sounds continuously,
+but on the body the heartbeat competes with breathing, muscle and contact noise, movement and room sound. The
+signal-processing problem was to make the heartbeat clean and detectable in real time on a small device.
+
+## Approach
+
+<Flow
+  label="Heart-sound processing chain"
+  steps={[
+    { title: 'Acoustic sensor', sub: 'wearable microphone, logged at ~16 kHz', kind: 'io' },
+    { title: 'Band-pass', sub: 'FIR/IIR designs around the heart-sound band (20–150 Hz)' },
+    { title: 'Time–frequency', sub: 'STFT and wavelet features', kind: 'model' },
+    { title: 'Source separation', sub: 'NMF splits heart from lung/ambient components', kind: 'model' },
+    { title: 'Beat detection', sub: 'envelope peaks → heart rate', kind: 'io' },
+  ]}
+/>
+
+- **Filter design first.** Heart sounds sit low in frequency, and much of the noise sits above them. I designed and
+  compared FIR and IIR band-pass filters for attenuation, phase behaviour and latency. The chosen design improved SNR
+  by **12 dB** within a **20 ms** processing budget.
+- **Separate what filtering can't.** Lung sounds and some body noise overlap the heart band. NMF on the STFT
+  magnitude learns spectral templates and activations, so the heart component can be kept and the others dropped.
+  Wavelet transforms gave a second time–frequency view of the same recordings.
+- **Detect beats.** Peak detection on the cleaned signal reached **96 % sensitivity**.
+
+## Results
+
+<LineChart
+  title="Six seconds of a sample recording"
+  xLabel="time (s)"
+  yLabel="normalised amplitude"
+  yDomain={[-1, 1]}
+  xDomain={[0, 6]}
+  series={[
+    { name: 'raw microphone', x: data.t, y: data.raw, tone: 'muted' },
+    { name: '20–150 Hz band-pass (zero-phase)', x: data.t, y: data.filtered, tone: 'accent' },
+  ]}
+  height={320}
+  basis="hardware"
+  caption="Regenerated from a logged sample with the lab notebook's filter (5th-order Butterworth, forward–backward). The heart sounds stand out as regular bursts once out-of-band noise is removed."
+/>
+
+<LineChart
+  title="Where the energy is: power spectrum before and after"
+  xLabel="frequency (Hz)"
+  yLabel="power (dB)"
+  xDomain={[0, 400]}
+  series={[
+    { name: 'raw', x: data.psd_f, y: data.psd_raw_db, tone: 'muted' },
+    { name: 'band-passed', x: data.psd_f, y: data.psd_filtered_db, tone: 'accent' },
+  ]}
+  vband={[20, 150]}
+  height={280}
+  basis="hardware"
+  caption="Welch spectrum of the same recording; the shaded band is the 20–150 Hz pass band."
+/>
+
+## What I learned
+
+- **Start from the spectrum.** Measuring where the signal and the noise actually sit decided the filter order and
+  band edges.
+- **Latency is a design constraint, not an afterthought.** A zero-phase filter is ideal offline but not real-time. The
+  deployed path has to trade phase distortion against delay.
+- **Unsupervised methods need sanity checks.** NMF components carry no labels. Deciding which one is "heart" means
+  checking it against what the heartbeat should look like in time and frequency.

@@ -1,0 +1,84 @@
+---
+/** Signal-flow diagram of the ECS haptic wheel firmware (drawn from src/lab4–6 and include/*.h). */
+const box = 'fill:var(--bg-elev);stroke:var(--line-strong);stroke-width:1.5';
+const hot = 'fill:var(--bg-elev);stroke:var(--accent);stroke-width:1.8';
+---
+
+<figure class="reveal my-8">
+  <div class="grid-bg overflow-x-auto rounded-xl border border-line bg-sunk p-3 sm:p-5">
+    <svg viewBox="0 0 860 400" class="h-auto w-full min-w-[640px]" role="img"
+      aria-label="Haptic wheel signal flow: the quadrature encoder on the wheel is decoded by the FTM peripheral; a 1 kHz LPIT timer interrupt reads the angle, estimates velocity, evaluates the selected virtual world and writes a PWM duty cycle to the motor driver, which drives the wheel motor. A second S32K144 exchanges state over CAN.">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"></path>
+        </marker>
+      </defs>
+      <g font-family="var(--font-sans)" font-size="15" fill="var(--ink)">
+        <!-- MCU boundary -->
+        <rect x="150" y="20" width="540" height="250" rx="14" style="fill:none;stroke:var(--line-strong);stroke-dasharray:6 5" />
+        <text x="166" y="44" font-family="var(--font-mono)" font-size="13" fill="var(--ink-3)">NXP S32K144 · embedded C</text>
+
+        <!-- plant -->
+        <rect x="16" y="120" width="112" height="84" rx="10" style={box} />
+        <text x="72" y="155" text-anchor="middle" font-weight="600">Wheel</text>
+        <text x="72" y="176" text-anchor="middle" font-size="13" fill="var(--ink-2)">DC motor +</text>
+        <text x="72" y="193" text-anchor="middle" font-size="13" fill="var(--ink-2)">encoder</text>
+
+        <!-- peripherals -->
+        <rect x="176" y="70" width="140" height="64" rx="10" style={box} />
+        <text x="246" y="97" text-anchor="middle" font-weight="600">Quadrature</text>
+        <text x="246" y="117" text-anchor="middle" font-size="13" fill="var(--ink-2)">FTM decoder → angle</text>
+
+        <rect x="176" y="186" width="140" height="64" rx="10" style={box} />
+        <text x="246" y="213" text-anchor="middle" font-weight="600">PWM</text>
+        <text x="246" y="233" text-anchor="middle" font-size="13" fill="var(--ink-2)">duty → H-bridge</text>
+
+        <!-- ISR -->
+        <rect x="360" y="70" width="300" height="180" rx="12" style={hot} />
+        <text x="378" y="96" font-weight="600">LPIT timer ISR · 1 kHz</text>
+        <text x="378" y="122" font-size="13" fill="var(--ink-2)">θ ← updateAngle()</text>
+        <text x="378" y="142" font-size="13" fill="var(--ink-2)">ω ← (θ − θₚᵣₑᵥ)·1000</text>
+        <text x="378" y="162" font-size="13" fill="var(--ink-2)">τ ← world(θ, ω)</text>
+        <text x="378" y="182" font-size="13" fill="var(--ink-2)">outputTorque(τ)</text>
+        <g font-family="var(--font-mono)" font-size="11.5" fill="var(--accent-ink)">
+          <text x="378" y="212">spring · spring-damper · wall-damper</text>
+          <text x="378" y="230">spring-mass(-damper) · 45° detents</text>
+        </g>
+
+        <!-- ADC -->
+        <rect x="560" y="290" width="130" height="56" rx="10" style={box} />
+        <text x="625" y="314" text-anchor="middle" font-weight="600">ADC</text>
+        <text x="625" y="333" text-anchor="middle" font-size="13" fill="var(--ink-2)">analog input</text>
+
+        <!-- second MCU -->
+        <rect x="726" y="120" width="120" height="84" rx="10" style={box} />
+        <text x="786" y="155" text-anchor="middle" font-weight="600">S32K144 #2</text>
+        <text x="786" y="176" text-anchor="middle" font-size="13" fill="var(--ink-2)">networked</text>
+        <text x="786" y="193" text-anchor="middle" font-size="13" fill="var(--ink-2)">node</text>
+
+        <!-- Simulink -->
+        <rect x="360" y="300" width="170" height="80" rx="10" style="fill:none;stroke:var(--line-strong);stroke-width:1.5;stroke-dasharray:4 4" />
+        <text x="445" y="330" text-anchor="middle" font-weight="600">Simulink / Stateflow</text>
+        <text x="445" y="351" text-anchor="middle" font-size="13" fill="var(--ink-2)">models → generated C</text>
+      </g>
+      <g fill="none" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#ah)">
+        <path d="M128 140 H150 V102 H172" />
+        <path d="M316 102 H356" />
+        <path d="M360 218 H320" />
+        <path d="M176 218 H150 V184 H132" />
+        <path d="M625 290 V254" />
+        <path d="M660 152 H722" marker-start="url(#ah)" />
+        <path d="M445 300 V254" stroke-dasharray="4 4" />
+      </g>
+      <g font-family="var(--font-mono)" font-size="12" fill="var(--ink-3)">
+        <text x="668" y="144">CAN</text>
+        <text x="133" y="96">A/B</text>
+        <text x="454" y="284">codegen</text>
+      </g>
+    </svg>
+  </div>
+  <figcaption class="mt-2.5 text-sm text-ink-3">
+    Firmware signal flow, drawn from the lab sources. The haptic loop closes inside one timer interrupt; the virtual
+    world is a function of angle and finite-difference velocity.
+  </figcaption>
+</figure>

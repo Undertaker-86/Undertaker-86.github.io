@@ -1,0 +1,220 @@
+---
+layout: ../../../layouts/WriteUp.astro
+title: 'K1 kicking: technical write-up'
+description: 'How the Booster K1 kicking skill was specified, trained and evaluated: policy interface, domain randomisation, the eight-approach comparison, the goal reward, the 5 000-shot MuJoCo benchmark and the full training changelog.'
+eyebrow: 'NomadZ · humanoid RL · deep dive'
+back: '/projects/nomadz-kicking'
+backLabel: 'NomadZ kicking'
+updated: '16 Nov 2026'
+---
+
+import BarCompare from '~/components/BarCompare.astro';
+import Figure from '~/components/Figure.astro';
+import armsPoster from '~/assets/nomadz-kicking/arms-2x2-poster.jpg';
+
+<nav aria-label="Contents" class="card p-5 text-sm">
+  <p class="eyebrow mb-3">Contents</p>
+  <div class="grid gap-1.5 sm:grid-cols-2">
+    <a class="link" href="#timeline">1 · Timeline</a>
+    <a class="link" href="#interface">2 · Policy interface</a>
+    <a class="link" href="#simulation">3 · Simulation and randomisation</a>
+    <a class="link" href="#arms">4 · Eight approaches</a>
+    <a class="link" href="#benchmark">5 · Goal task and benchmark</a>
+    <a class="link" href="#reward">6 · Goal reward v2</a>
+    <a class="link" href="#changelog">7 · Training changelog</a>
+    <a class="link" href="#analysis">8 · Where the policy misses</a>
+    <a class="link" href="#next">9 · Next steps</a>
+  </div>
+</nav>
+
+<h2 id="timeline">Timeline</h2>
+
+All training ran on one shared RTX 5080; every evaluation ran in MuJoCo, a different physics engine from the
+Isaac Lab training simulator.
+
+| Date (2026) | Step |
+|---|---|
+| 8 Nov | Reconnaissance of the team stack, robot chosen (Booster K1, which the team plays with), plan and comparison arms fixed. Baseline harness and domain-randomisation ablations. |
+| 9 Nov | First overnight training runs (A1, A2). |
+| 12–13 Nov | All arms trained and compared on a 450-scenario direction benchmark. |
+| 13 Nov | Goal task and 5 000-shot goal benchmark; reward hack found and fixed; best arm selected (A1). |
+| 14–16 Nov | Goal reward v2 campaign on A1: far-goal rate 39.5 → 73.4 %. |
+
+<h2 id="interface">Policy interface</h2>
+
+The policy is written against what the real robot can provide, so it can be exported to the team's skill server
+without changes.
+
+| Item | Specification |
+|---|---|
+| Control | 50 Hz policy on 200 Hz physics (decimation 4) |
+| Action | joint targets = default pose + 0.25 · a for the 20 non-head joints; fixed `walk` PD gains (hips/knees 100, ankles 65, arms 20) |
+| Head | separate look-at-ball controller (the policy had to be fine-tuned with it in the loop: the old checkpoint fell 16/16 times when the head started tracking the ball) |
+| Actor observations | gyro, projected gravity, joint positions and velocities, last action, ball (x, y) estimate in the heading frame with validity and age, command (direction, range); later + 10 older ball detections (300 ms of history) |
+| No privileged state | the actor sees only on-robot signals; the critic additionally sees reward bookkeeping and the torque mode |
+| Export target | ONNX + metadata for the team's skill server; on-robot inference has to fit the 20 ms control tick |
+
+<h2 id="simulation">Simulation and domain randomisation</h2>
+
+Before training, I measured which randomisation factors actually hurt an existing kick policy (32 kicks per factor,
+each factor alone):
+
+- **Perception** (camera model + outages) was by far the most damaging: falls 15/32, touch rate 0.50.
+- Next were trunk mass / centre of mass (11/32 falls), encoder offsets (10/32) and ball properties (9/32).
+- **Physics rate:** launch speed changed only 7 % between 200 and 800 Hz, so 200 Hz was kept.
+- **Ball model:** Isaac's per-step ball damping let the ball roll ~22 % too far compared with the rolling law; the
+  MuJoCo ball model matched it within 2 % (restitution 0.45). This is why MuJoCo is the judge.
+
+| Group | Range (per env or per episode) |
+|---|---|
+| Ground / foot friction | 0.4–1.3 / 0.6–1.2 |
+| Ball radius / mass | 0.093–0.105 m / 0.28–0.40 kg |
+| Ball rolling resistance | 0.4–1.2, later narrowed to 0.45–0.85 around the field fit 0.64 (see changelog) |
+| Trunk mass / CoM | ±2 kg / ±2.5 cm |
+| Link inertia, joint friction, armature | ±15 %, ±25 %, ±20 % |
+| Encoder offsets, Kp/Kd scaling | ±0.02 rad, ±10 % |
+| Actuator delay | 10–40 ms |
+| Perception | 25 Hz camera, ~100 ms latency, field of view, head pose, dropouts including impact bursts, close-range noise |
+| Pushes | 20–60 N for 0.1 s on the trunk, before and after the touch |
+| Torque limits | per env: 75 % deploy limits, 25 % motor-peak curve, matching the benchmark rows |
+
+<h2 id="arms">Eight approaches, compared on the same scenarios</h2>
+
+<Figure
+  video={{ slug: 'nomadz-kicking', name: 'arms-2x2', poster: armsPoster }}
+  alt="Four simulated K1 robots taking the same shot in MuJoCo"
+  caption="Same shot, four arms: A1 and A6 (top), A7b and A3 (bottom)."
+  basis="simulation"
+/>
+
+| Arm | Approach | Finding |
+|---|---|---|
+| A0 | Firmware kick replayed open loop | falls every time in simulation: it needs the firmware's own balance control |
+| A1 | PPO + AMP on 8 firmware kick clips + task reward | touch 0.93, the best transfer of the PPO arms; source of A6's training data |
+| A2 | Firmware-kick tracker + kick inputs, two stages | most stable (0 falls in 1 080 kicks) but ignored the commanded direction |
+| A3 | Pure PPO, no motion prior | swings at the ball; the worst transfer to MuJoCo |
+| A4 | Multi-clip motion tracker | held-out clip completion 0.18 → 0.67 |
+| A5 | SuperMimic ported to the K1 (MuJoCo Warp) | tracks all 5 held-out clips after 6 minutes of training |
+| A6 | Diffusion policy trained on 6 000 A1 episodes (1.07 M steps, 19.4 M parameters) | matches A1 with fewer falls, ~16× slower to evaluate |
+| A7a / A7b | Firmware tracker / residual RL on top of it | the residual cut MuJoCo falls from 450 to 56 of 450 |
+
+**Direction benchmark (450 paired MuJoCo scenarios, 8 physics rows).** The learned arms touched the ball 93–95 % of the
+time, but the median direction error was 23–28° and the same at every commanded direction: random scatter, not a bias
+that a correction could remove. Outcome-guided sampling of the diffusion policy did not reduce it either. Precision,
+not contact, was the open problem, which is what the goal task measures directly.
+
+<h2 id="benchmark">Goal task and benchmark</h2>
+
+- **Goal:** the HSL middle-division goal from the team's field model, 2.6 m wide, 1.8 m high, 0.8 m deep, 10 cm posts; a goal counts when the
+  whole ball is inside.
+- **Shots:** ball-to-goal 1.5–4.5 m, up to ±50° off the goal normal, goal within ±45° of the robot's heading, ball
+  placed where the team's walking behaviour leaves it.
+- **Benchmark:** 5 000 seeded shots, identical for every policy, in MuJoCo, across deploy and peak torque rows. Quick
+  screens (1 000 close + 1 000 far shots) every 250 iterations; decisions only on full validations, which repeat
+  within about ±1 point.
+- **Clean goal:** the first contact is a foot, there is no re-touch, and the ball goes in.
+
+<BarCompare
+  title="Goal rate by approach (MuJoCo, 5 000 shots)"
+  afterName="goals"
+  unit=" %"
+  max={100}
+  rows={[
+    { label: 'A1 after goal reward v2', after: 82.0 },
+    { label: 'A6 on goal-A1 data', after: 66.9 },
+    { label: 'A1 goal-trained', after: 60.7 },
+    { label: 'A7b goal-trained', after: 51.5 },
+    { label: 'A3 pure PPO', after: 28.5 },
+  ]}
+  basis="simulation"
+/>
+
+**A reward hack, found by the benchmark.** The first goal reward paid for any contact. Within 1 500 iterations A1
+learned to shove close balls with its shin: Isaac reported 99 % touches, but in MuJoCo 11 % of shots had no foot
+contact and clean goals halved (42 → 22 %). Gating every goal reward on a clean foot contact fixed it.
+
+**Why far shots missed (A1 goal-trained, 3.75–4.5 m):** 42 % wide, 18 % on line but short. Launch speed was about
+3 m/s at every distance, yet far shots on target score 17 % below 2.5 m/s and 96 % above 4 m/s. Slow kicks were also
+less accurate (median aim error 21.6° vs 8.6°).
+
+<h2 id="reward">Goal reward v2</h2>
+
+Episode-scale terms, multiplied by the task weight in the AMP task/style mix:
+
+| Term | Definition |
+|---|---|
+| Distance factor D | 1 + 0.5 · clip((d − 1.5)/3, 0, 1): far shots are worth up to 1.5× |
+| Eligibility E | first contact is a foot, no re-touch, plausible launch, contact ≤ 120 ms |
+| `goal_scored` | 20 · D · E |
+| `goal_aim` | graded lateral miss on the goal line at launch, × D · E (weight later 6 → 10) |
+| `launch_speed` | once per kick, ∝ on-target horizontal launch speed, × D · E (weight later 1 → 0.25 per m/s) |
+| `quality` | one-sided: penalises launching slower than commanded, not faster |
+| Revocation | a re-touch or a contact longer than 120 ms takes back all goal rewards paid so far |
+| Fall | −20 minus the goal rewards already paid, so falling after a goal never pays |
+| Episode | fixed 7 s after the first touch, so there is no incentive to keep the ball rolling |
+
+<h2 id="changelog">Training changelog</h2>
+
+Every step started from the best checkpoint of the previous one and changed one thing. Far = 3.75–4.5 m goal rate
+on the full validation.
+
+| Step | Change | Far goals |
+|---|---|---|
+| Start | A1 goal-trained | 39.5 % |
+| 1 | Goal reward v2 | ~56 % |
+| 2 | Longer credit assignment: γ 0.997, λ 0.99, 64-step rollouts (the set-up step happens ~0.5 s before the kick is paid) | ~59 % |
+| 3 | Ball-rolling randomisation narrowed from 0.4–1.2 to 0.45–0.85: at 1.2 many far shots were physically unreachable, so training had pushed power over aim | ~65 % |
+| 4 | Set-up factor: a first touch before 0.3 s pays 0.3× (rushed first touches 15 % → 2 % of far shots) | ~67 % |
+| 5 | Ten more past ball detections (300 ms instead of 80 ms) | **73.4 %** |
+
+Lines that did not beat the best, each tested on full validation:
+
+| Change | Far goals |
+|---|---|
+| Training without the AMP style term (tested at step 1) | 53.9 %, no effect |
+| Oversampling shots where the ball is unseen just before contact | 65.6 % |
+| Lower KL target / learning rate | 68.9–70.1 % |
+| Reach reward instead of quality | 69.8 % |
+| Quality + reach | 72.3 % |
+| Checkpoint weight averaging | 73.9 % (tie) |
+| Hand-built ball filter as extra inputs | 73.1 → 67.5 % |
+| Lower action noise (0.25 → 0.20) | 71.8 % far, but the best close rate: 92.2 % |
+| Filtered ball estimate instead of the raw one | 73.0 % (tie) |
+
+Plain extra iterations past a peak drifted down by 2–8 points, which is why every line restarts from the best.
+
+<h2 id="analysis">Where the best policy misses</h2>
+
+<BarCompare
+  title="Far goals of the same policy under three camera models (1 220 far shots)"
+  afterName="far goals"
+  unit=" %"
+  max={100}
+  rows={[
+    { label: 'Benchmark camera', after: 73 },
+    { label: 'Low noise', after: 89.4 },
+    { label: 'Perfect camera', after: 90.0 },
+  ]}
+  basis="simulation"
+  caption="Low noise keeps latency and dropouts but removes position noise and blind spells. 236 of the 313 far misses go in with the low-noise camera."
+/>
+
+| Situation (far shots) | Far goals | Compared with |
+|---|---|---|
+| Left-foot kicks (13 % of far shots) | 39 % | right foot 80 % |
+| Ball close to the robot (x < 0.35 m) | 66 % | x ≥ 0.5 m: 83 % |
+| Ball off to the side (\|y\| ≥ 0.15 m) | 68 % | centred: 80 % |
+| Approach angle ≥ 45° | 68 % | < 15°: 77 % |
+| Mesh-shaped foot colliders | 69–70 % | box feet: 74–78 % |
+
+Miss types on far shots: wide 19.4 %, short 6 % (weak contacts around 2.5 m/s), falls 0.25 %.
+
+<h2 id="next">Next steps</h2>
+
+1. **A learned ball estimator** (rollouts of the best policy → a small MLP/GRU trained by supervised learning):
+   the camera analysis puts the ceiling at up to ~17 far points.
+2. **The left foot:** oversample left-foot situations; up to ~5 far points if left-foot kicks scored like right-foot
+   ones.
+3. **Foot-contact randomisation** (box vs mesh collider, friction, contact stiffness) for transfer to the real foot.
+4. A one-time run on the locked test split for the final number, a turf measurement of rolling resistance, and then
+   hardware tests on the K1.

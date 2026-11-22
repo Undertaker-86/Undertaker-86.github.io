@@ -1,0 +1,91 @@
+---
+/** Theme-aware pipeline diagram in HTML/CSS: horizontal on wide screens, vertical on phones. */
+interface Step {
+  title: string;
+  sub?: string;
+  kind?: 'io' | 'model' | 'op';
+}
+interface Props {
+  steps: Step[];
+  caption?: string;
+  feedback?: string; // label of a loop arrow from the last step back to the first
+  label: string; // accessible description of the whole diagram
+}
+const { steps, caption, feedback, label } = Astro.props;
+---
+
+<figure class="reveal my-8" role="img" aria-label={label}>
+  <div class="grid-bg overflow-hidden rounded-xl border border-line bg-sunk p-4 sm:p-6">
+    <ol class="flow" style={`--n:${steps.length}`}>
+      {
+        steps.map((s, i) => (
+          <li class:list={['flow-step', s.kind ?? 'op']}>
+            <span class="font-mono text-[0.62rem] text-ink-3">{String(i + 1).padStart(2, '0')}</span>
+            <span class="block text-[0.9rem] leading-snug font-semibold text-ink">{s.title}</span>
+            {s.sub && <span class="mt-1 block text-[0.78rem] leading-snug text-ink-2">{s.sub}</span>}
+          </li>
+        ))
+      }
+    </ol>
+    {
+      feedback && (
+        <p class="mt-4 flex items-center gap-2 font-mono text-[0.72rem] text-ink-3">
+          <svg width="28" height="12" viewBox="0 0 28 12" aria-hidden="true">
+            <path d="M26 2 V8 H3 M7 4 L3 8 L7 12" fill="none" stroke="var(--accent)" stroke-width="1.5" />
+          </svg>
+          {feedback}
+        </p>
+      )
+    }
+  </div>
+  {caption && <figcaption class="mt-2.5 text-sm text-ink-3">{caption}</figcaption>}
+</figure>
+
+<style>
+  .flow {
+    display: grid;
+    gap: 1.6rem;
+    grid-template-columns: 1fr;
+  }
+  @media (min-width: 52rem) {
+    .flow {
+      grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+      gap: 1.4rem;
+    }
+  }
+  .flow-step {
+    position: relative;
+    border: 1px solid var(--line-strong);
+    background: var(--bg-elev);
+    border-radius: 0.7rem;
+    padding: 0.7rem 0.8rem 0.8rem;
+  }
+  .flow-step.model {
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--line-strong));
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .flow-step.io {
+    border-style: dashed;
+    background: transparent;
+  }
+  .flow-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 1.2rem;
+    bottom: -1.25rem;
+    width: 9px;
+    height: 9px;
+    border-right: 1.5px solid var(--accent);
+    border-bottom: 1.5px solid var(--accent);
+    transform: rotate(45deg);
+  }
+  @media (min-width: 52rem) {
+    .flow-step:not(:last-child)::after {
+      left: auto;
+      bottom: auto;
+      right: -1.05rem;
+      top: 1.35rem;
+      transform: rotate(-45deg);
+    }
+  }
+</style>

@@ -1,0 +1,104 @@
+---
+import { site } from '~/site.config';
+const items = [
+  site.email.show && site.email.value && { label: 'Email', value: site.email.value, href: `mailto:${site.email.value}` },
+  site.linkedin.show && site.linkedin.value && { label: 'LinkedIn', value: site.linkedin.value.replace(/^https?:\/\/(www\.)?/, ''), href: site.linkedin.value },
+  site.github.show && site.github.value && { label: 'GitHub', value: `@${site.github.value}`, href: `https://github.com/${site.github.value}` },
+  site.scholar.show && site.scholar.href && { label: 'Scholar', value: 'Google Scholar profile', href: site.scholar.href },
+].filter(Boolean) as { label: string; value: string; href: string }[];
+const email = site.email.show ? site.email.value : '';
+---
+
+<section id="contact" class="wrap pb-8" aria-labelledby="contact-h">
+  <div class="reveal card relative overflow-hidden p-6 sm:p-10">
+    <div class="grid-bg pointer-events-none absolute inset-0 opacity-70 [mask-image:radial-gradient(ellipse_at_top_right,#000,transparent_70%)]"></div>
+    <div class="relative grid gap-10 lg:grid-cols-[1fr_1.1fr]">
+      <div>
+        <p class="eyebrow">Contact</p>
+        <h2 id="contact-h" class="mt-2 text-3xl font-semibold text-ink sm:text-4xl">Let's build robots that work outside the lab.</h2>
+        <p class="mt-3 max-w-xl text-ink-2">
+          Research and engineering roles in robot learning, perception and control, thesis projects, internships or
+          collaborations: write me a line.
+        </p>
+        <ul class="mt-6 space-y-2">
+          {
+            items.map((c) => (
+              <li>
+                <a href={c.href} class="group flex items-center justify-between gap-4 rounded-lg border border-line bg-bg/60 px-4 py-3 transition-colors hover:border-accent" rel="noopener">
+                  <span class="eyebrow">{c.label}</span>
+                  <span class="truncate font-mono text-sm text-ink group-hover:text-accent-ink">{c.value}</span>
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+      {
+        email && (
+          <form class="contact-form grid gap-3" data-contact-form data-to={email} action={`mailto:${email}`} method="post" enctype="text/plain">
+            <div class="grid gap-3 sm:grid-cols-2">
+              <label class="grid gap-1.5 text-sm text-ink-2">
+                Name
+                <input name="name" required autocomplete="name" class="field" />
+              </label>
+              <label class="grid gap-1.5 text-sm text-ink-2">
+                Your email
+                <input name="email" type="email" required autocomplete="email" class="field" />
+              </label>
+            </div>
+            <label class="grid gap-1.5 text-sm text-ink-2">
+              Subject
+              <input name="subject" autocomplete="off" placeholder="Thesis project, internship, collaboration…" class="field" />
+            </label>
+            <label class="grid gap-1.5 text-sm text-ink-2">
+              Message
+              <textarea name="message" required rows="5" class="field resize-y"></textarea>
+            </label>
+            <div class="flex flex-wrap items-center gap-3">
+              <button type="submit" class="rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-on-accent transition hover:brightness-110">Send message</button>
+              <p class="text-xs text-ink-3">Opens your email app with the message ready to send.</p>
+            </div>
+          </form>
+        )
+      }
+    </div>
+  </div>
+</section>
+
+<script>
+  // Progressive enhancement: build a clean mailto: link instead of the browser's raw text/plain form post.
+  document.addEventListener('astro:page-load', () => {
+    document.querySelectorAll<HTMLFormElement>('[data-contact-form]').forEach((f) => {
+      if (f.dataset.bound) return;
+      f.dataset.bound = '1';
+      f.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const d = new FormData(f);
+        const subject = String(d.get('subject') || 'Hello from your portfolio');
+        const body = `${d.get('message')}\n\n— ${d.get('name')} (${d.get('email')})`;
+        location.href = `mailto:${f.dataset.to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      });
+    });
+  });
+</script>
+
+<style>
+  .field {
+    width: 100%;
+    border: 1px solid var(--line-strong);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 0.55rem;
+    padding: 0.6rem 0.75rem;
+    font-size: 0.95rem;
+    transition: border-color 0.15s;
+  }
+  .field:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .field::placeholder {
+    color: var(--ink-3);
+  }
+</style>
